@@ -1,0 +1,2679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>PinSheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --g:#14301a;--g2:#1d4226;--g3:#234d2a;
+  --au:#c9982a;--au2:#e0b84e;--au3:#f5d882;
+  --cr:#f0ece2;--ms:#e2ddd0;--fg:#9a8f78;--sh:#5a5040;
+  --rd:#8b2315;
+  --serif:'Cormorant Garamond',Georgia,serif;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --sb:env(safe-area-inset-bottom,0px);
+  --st:env(safe-area-inset-top,0px);
+  --TH:52px;   /* taller top bar — easier to tap */
+  --SW:48px;   /* wider sidebar — bigger hole numbers */
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--g);font-family:var(--sans);
+  /* Prevent iOS text size adjustment in landscape */
+  -webkit-text-size-adjust:100%;text-size-adjust:100%}
+
+/* ── TOP BAR ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:calc(var(--TH) + var(--st));padding-top:var(--st);background:var(--g);border-bottom:1px solid rgba(201,152,42,.22);display:flex;align-items:center;z-index:500}
+.tb-brand{width:var(--SW);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;border-right:1px solid rgba(201,152,42,.18);height:100%}
+.tb-tabs{flex:1;display:flex;align-items:stretch;height:100%;overflow:hidden}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.2px;color:rgba(201,152,42,.38);
+  cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;
+  transition:color .15s,border-color .15s;-webkit-appearance:none;padding:0 2px;
+  min-height:44px; /* Apple minimum touch target */}
+.tab.on{color:var(--au2);border-bottom-color:var(--au2)}
+.tab svg{width:16px;height:16px;flex-shrink:0}
+.tb-gps{flex-shrink:0;display:flex;align-items:center;gap:5px;padding:0 10px;height:100%;
+  font-family:var(--mono);font-size:10px;color:rgba(201,152,42,.55);
+  border-left:1px solid rgba(201,152,42,.18);white-space:nowrap}
+.gdot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.2);flex-shrink:0}
+.gdot.live{background:#4caf50;box-shadow:0 0 5px #4caf50;animation:blink 2s infinite}
+.gdot.seek{background:var(--au2);animation:blink .7s infinite}
+.gdot.fail{background:var(--rd)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── SIDEBAR ── */
+#sidebar{position:fixed;top:calc(var(--TH) + var(--st));left:0;bottom:0;width:var(--SW);background:var(--g);border-right:1px solid rgba(201,152,42,.18);overflow-y:auto;overflow-x:hidden;scrollbar-width:none;z-index:400;padding:4px 3px 8px}
+#sidebar::-webkit-scrollbar{display:none}
+.hbtn{width:100%;aspect-ratio:1;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:14px;font-weight:600;color:rgba(240,236,226,.4);
+  cursor:pointer;margin-bottom:3px;transition:all .1s;-webkit-appearance:none;position:relative;
+  min-height:42px;}
+.hbtn.on{background:var(--au);border-color:var(--au2);color:#0d1a0f;font-weight:700}
+.hbtn.done::after{content:'';position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--au2)}
+.hbtn.on.done::after{background:#0d1a0f}
+.hbtn.cal::before{content:'📍';position:absolute;bottom:1px;left:1px;font-size:8px;line-height:1}
+
+/* ── MAIN ── */
+#main{position:fixed;top:calc(var(--TH) + var(--st));left:var(--SW);right:0;bottom:0;overflow:hidden}
+.pane{display:none;position:absolute;inset:0;background:#f5f1e8}
+.pane.on{display:block}
+.pane.scroll{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px}
+
+/* ── PLAY PANE ── */
+.hole-hdr{background:var(--g);border-radius:11px;padding:11px 14px;margin-bottom:11px;display:flex;align-items:center;gap:10px}
+.hh-info{flex:1}
+.hh-hole{font-family:var(--serif);font-size:26px;font-weight:700;color:var(--au3);line-height:1}
+.hh-meta{font-family:var(--mono);font-size:12px;color:rgba(201,152,42,.6);margin-top:3px}
+.hh-score-area{display:flex;align-items:center;gap:8px}
+/* Score +/- buttons: 48px min touch target */
+.sc-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:var(--cr);
+  width:48px;height:48px;border-radius:10px;font-size:28px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;line-height:1;flex-shrink:0}
+.sc-btn:active{transform:scale(.86);background:rgba(255,255,255,.22)}
+.hh-sc-mid{text-align:center;min-width:58px}
+.hh-scnum{font-family:var(--serif);font-size:46px;font-weight:700;color:var(--cr);line-height:1}
+.hh-scnum.bir{color:#66bb6a}.hh-scnum.eag{color:var(--au3)}.hh-scnum.bog{color:#ffb74d}.hh-scnum.dbl{color:#ef5350}.hh-scnum.wrs{color:#b71c1c}
+.hh-screl{font-family:var(--mono);font-size:10px;letter-spacing:1px;height:14px;margin-top:2px}
+.hh-screl.u{color:#66bb6a}.hh-screl.o{color:#ffb74d}.hh-screl.e{color:rgba(240,236,226,.3)}
+.hh-tot{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.5);text-align:center;margin-top:2px}
+
+.oc-bar{background:rgba(201,152,42,.1);border:1px solid rgba(201,152,42,.25);border-radius:8px;padding:8px 12px;margin-bottom:11px;font-family:var(--mono);font-size:12px;color:var(--au2);display:flex;gap:7px;align-items:center}
+
+/* Section headers */
+.sh{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--sh);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.sh::after{content:'';flex:1;height:1px;background:var(--ms)}
+
+/* Green distance cards — the main yardage the golfer looks at */
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:11px}
+.gc{background:white;border-radius:11px;padding:12px 8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid var(--ms)}
+.gc.mid{background:var(--g);border-color:rgba(201,152,42,.3);transform:scale(1.04)}
+.gc-l{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--fg);margin-bottom:5px}
+.gc.mid .gc-l{color:rgba(201,152,42,.65)}
+/* BIG yardage numbers — most important thing on the screen */
+.gc-v{font-family:var(--serif);font-size:38px;font-weight:600;color:#0d1a0f;line-height:1}
+.gc.mid .gc-v{font-size:48px;color:var(--au3)}
+.gc-u{font-family:var(--mono);font-size:11px;color:var(--fg);margin-top:2px}
+.gc.mid .gc-u{color:rgba(201,152,42,.55)}
+
+/* Tee box distances */
+.t4{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:11px}
+.tc{background:white;border-radius:8px;border:1px solid var(--ms);padding:9px 4px;text-align:center}
+.tc-l{font-size:11px;font-family:var(--mono);letter-spacing:.3px;margin-bottom:4px}
+.tc-v{font-family:var(--serif);font-size:22px;font-weight:600;color:#0d1a0f;line-height:1}
+.tc-s{font-family:var(--mono);font-size:10px;color:var(--fg);margin-top:2px}
+
+/* Hazard grid */
+.haz2{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:11px}
+.hc{background:white;border:1px solid var(--ms);border-radius:8px;padding:10px 11px;display:flex;align-items:center;gap:8px}
+.hc-i{font-size:20px;flex-shrink:0}
+.hc-n{font-family:var(--mono);font-size:10px;color:var(--sh);margin-bottom:2px;line-height:1.3}
+.hc-d{font-family:var(--serif);font-size:24px;font-weight:600;color:#0d1a0f;line-height:1}
+
+.hole-d{background:white;border-left:3px solid var(--au);border-radius:0 9px 9px 0;padding:11px 13px;font-size:14px;font-family:var(--serif);font-style:italic;color:var(--sh);line-height:1.7;margin-bottom:12px}
+
+/* ── MAP ── */
+#pMap{background:var(--g)}
+#lmap{position:absolute;inset:0;z-index:1}
+.map-toolbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:7px;align-items:center}
+.mtb-btn{background:rgba(13,28,17,.93);border:1px solid rgba(201,152,42,.3);color:var(--au2);
+  padding:9px 15px;border-radius:22px;font-family:var(--mono);font-size:12px;
+  cursor:pointer;-webkit-appearance:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4);
+  display:flex;align-items:center;gap:5px;min-height:44px;}
+.mtb-btn.active{background:var(--au);color:#0d1a0f;border-color:var(--au)}
+.mtb-btn:active{transform:scale(.95)}
+.map-loc{position:absolute;top:12px;right:12px;z-index:20;background:rgba(13,28,17,.92);border:1px solid rgba(201,152,42,.3);color:var(--au2);width:44px;height:44px;border-radius:10px;font-size:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.cal-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:rgba(13,28,17,.97);border-top:1px solid rgba(201,152,42,.3);padding:12px 14px;backdrop-filter:blur(12px)}
+.cal-panel-title{font-family:var(--serif);font-size:17px;color:var(--au3);margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
+.cal-panel-sub{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.5);margin-bottom:10px;line-height:1.55}
+.cal-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:7px}
+.cal-act-btn{background:rgba(201,152,42,.12);border:1px solid rgba(201,152,42,.25);color:var(--au2);border-radius:8px;padding:11px 6px;font-family:var(--mono);font-size:11px;cursor:pointer;text-align:center;-webkit-appearance:none;line-height:1.35;min-height:44px;}
+.cal-act-btn.danger{background:rgba(139,35,21,.18);border-color:rgba(139,35,21,.3);color:#ef9a9a}
+.cal-act-btn:active{opacity:.7}
+.cal-status{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.45);text-align:center;min-height:16px}
+.map-hud{position:absolute;bottom:0;left:0;right:0;z-index:10;background:rgba(13,28,17,.96);border-top:1px solid rgba(201,152,42,.2);padding:10px 13px;backdrop-filter:blur(12px)}
+.mh-row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mh-title{font-family:var(--serif);font-size:16px;color:var(--au2)}
+.mh-stat{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.4)}
+.mh-legs{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.ml{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:rgba(240,236,226,.6)}
+.ml-d{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mh-dists{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.mhd-l{font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:rgba(201,152,42,.5);text-align:center}
+.mhd-v{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--cr);text-align:center;line-height:1.2}
+
+/* ── TOUR ── */
+#pTour{display:none;flex-direction:column}
+#pTour.on{display:flex}
+.tour-hdr{flex-shrink:0;background:var(--g);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(201,152,42,.18)}
+.th-title{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--au3)}
+.th-sub{font-family:var(--mono);font-size:10px;color:rgba(201,152,42,.45);letter-spacing:.5px;margin-top:2px}
+.t-btn{background:rgba(201,152,42,.14);border:1px solid rgba(201,152,42,.28);color:var(--au2);padding:9px 14px;border-radius:8px;font-family:var(--mono);font-size:12px;cursor:pointer;-webkit-appearance:none;min-height:44px;}
+.t-btn:active{transform:scale(.93)}.t-btn.load{opacity:.5;pointer-events:none}
+.tour-subtabs{flex-shrink:0;display:flex;background:var(--g2);border-bottom:1px solid rgba(201,152,42,.15)}
+.stab{flex:1;padding:10px 6px;text-align:center;font-family:var(--mono);font-size:12px;color:rgba(201,152,42,.38);cursor:pointer;border-bottom:3px solid transparent;-webkit-appearance:none;background:none;border-left:none;border-top:none;border-right:none;transition:color .12s,border-color .12s;min-height:44px;}
+.stab.on{color:var(--au2);border-bottom-color:var(--au2)}
+.tour-content{flex:1;overflow:hidden;position:relative}
+.tsec{display:none;position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.tsec.on{display:block}
+.t-idle{text-align:center;padding:32px 16px}
+.t-idle p{font-family:var(--sans);font-size:15px;color:var(--sh);margin-bottom:16px;line-height:1.65}
+.t-go{background:var(--g);color:var(--au3);border:1px solid rgba(201,152,42,.3);padding:13px 28px;border-radius:11px;font-family:var(--serif);font-size:16px;font-weight:700;cursor:pointer;min-height:44px;}
+.t-spin{text-align:center;padding:32px;font-size:38px;animation:tspin 1s linear infinite}
+@keyframes tspin{to{transform:rotate(360deg)}}
+.t-err{padding:18px;font-family:var(--mono);font-size:12px;color:var(--sh);line-height:1.8;text-align:center}
+.t-retry{background:var(--g);color:var(--au2);border:none;padding:10px 22px;border-radius:8px;font-family:var(--mono);font-size:12px;cursor:pointer;margin-top:10px;-webkit-appearance:none;min-height:44px;}
+.tour-status-bar{padding:8px 12px;display:flex;justify-content:space-between;align-items:center;background:#f0ece2;border-bottom:1px solid rgba(0,0,0,.05)}
+.badge-live{background:#c62828;color:white;padding:3px 10px;border-radius:14px;font-family:var(--mono);font-size:10px;letter-spacing:1px}
+.badge-done{background:#2e7d32;color:white;padding:3px 10px;border-radius:14px;font-family:var(--mono);font-size:10px;letter-spacing:1px}
+.badge-pre{background:#1a3a5c;color:white;padding:3px 10px;border-radius:14px;font-family:var(--mono);font-size:10px;letter-spacing:1px}
+/* Leaderboard table — sized for squinting on a phone in sunlight */
+.lb-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.lb-tbl{width:100%;border-collapse:collapse;min-width:360px}
+.lb-tbl thead{position:sticky;top:0;z-index:4}
+.lb-tbl thead th{background:var(--g2);color:rgba(201,152,42,.65);padding:9px 5px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.8px;
+  border-bottom:1px solid rgba(201,152,42,.15);white-space:nowrap}
+.lb-tbl thead th:nth-child(2){text-align:left;padding-left:10px}
+.lb-tbl td{padding:10px 5px;text-align:center;border-bottom:1px solid rgba(0,0,0,.05);
+  background:white;font-family:var(--mono);color:#1a1a1a;font-size:13px;white-space:nowrap}
+.lb-tbl td:nth-child(2){text-align:left;padding-left:10px;font-family:var(--sans);font-size:14px}
+.lb-tbl tbody tr:nth-child(even) td{background:#f0ece4}
+.t-u{color:#2e7d32;font-weight:700}.t-o{color:#c62828}.t-e{color:#555}
+.tt-grp-hdr{background:var(--g);padding:8px 12px;font-family:var(--mono);font-size:11px;letter-spacing:1.2px;color:rgba(201,152,42,.6);text-transform:uppercase;position:sticky;top:0;z-index:3}
+.tt-row{padding:10px 12px;border-bottom:1px solid rgba(0,0,0,.05);background:white;display:flex;align-items:flex-start;gap:12px;min-height:44px;}
+.tt-time{font-family:var(--mono);font-size:13px;color:var(--au);min-width:74px;font-weight:600;flex-shrink:0;padding-top:2px}
+.tt-players{font-size:14px;font-family:var(--sans);color:#1a1a1a;line-height:1.65}
+.tt-none{padding:18px 14px;font-family:var(--mono);font-size:12px;color:var(--sh);text-align:center;background:white;line-height:1.9}
+
+/* ── SCORECARD ── */
+#pCard.on{display:block;overflow-y:auto}
+.card-header{background:var(--g);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5;min-height:52px}
+.card-title{font-family:var(--serif);font-size:16px;color:var(--au3)}
+.card-rst{background:rgba(139,35,21,.18);border:1px solid rgba(139,35,21,.28);color:#ef9a9a;padding:8px 12px;border-radius:7px;font-family:var(--mono);font-size:11px;cursor:pointer;-webkit-appearance:none;min-height:44px;}
+.sc-tbl{width:100%;border-collapse:collapse;font-family:var(--mono)}
+.sc-tbl th{background:var(--ms);color:var(--sh);padding:9px 5px;text-align:center;font-size:11px;border-bottom:1px solid rgba(0,0,0,.07)}
+.sc-tbl td{padding:11px 5px;text-align:center;border-bottom:1px solid rgba(0,0,0,.05);color:#1a1a1a;font-size:14px}
+.sc-tbl tr.cur td{background:rgba(201,152,42,.12)}
+.sc-tbl tr.sub td{background:var(--g);color:var(--au3);font-weight:600;font-size:14px;border-top:1px solid rgba(201,152,42,.2)}
+.ce{color:#2e7d32;font-weight:700}.ca{color:var(--au)}.cb{color:#e65100}.cd{color:#c62828;font-weight:700}
+
+/* ── CLUBS ── */
+.sug-box{background:var(--g);border-radius:11px;padding:16px;margin-bottom:11px;text-align:center}
+.sug-l{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(201,152,42,.55);margin-bottom:6px}
+.sug-c{font-family:var(--serif);font-size:44px;font-weight:700;color:var(--au3)}
+.sug-n{font-family:var(--mono);font-size:12px;color:rgba(201,152,42,.5);margin-top:4px}
+.clubs-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.club-row{background:white;border:1px solid var(--ms);border-radius:9px;padding:12px 13px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;-webkit-appearance:none;min-height:52px;}
+.club-row:active{background:var(--ms)}
+.cn{font-family:var(--sans);font-size:15px;color:var(--sh)}.cy{font-family:var(--serif);font-size:22px;font-weight:600;color:#1a1a1a}
+
+/* ── PINSHEET LANDING ── */
+.ovr{position:fixed;inset:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.ovr.gone{display:none}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+
+/* Header band */
+.ovr-header{flex-shrink:0;padding:44px 28px 20px;text-align:center;
+  background:linear-gradient(180deg,rgba(10,24,13,.0) 0%,rgba(10,24,13,.0) 100%)}
+.ovr-logo{font-size:48px;animation:float 3s ease-in-out infinite;display:block;margin-bottom:10px}
+.ovr-appname{font-family:var(--serif);font-size:38px;font-weight:700;color:var(--au3);
+  letter-spacing:-.5px;line-height:1}
+.ovr-tagline{font-family:var(--serif);font-style:italic;font-size:16px;
+  color:rgba(201,152,42,.55);margin-top:6px}
+
+/* Search panel */
+.ovr-search-panel{flex-shrink:0;padding:0 20px 16px;margin-top:20px}
+.ovr-search-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:rgba(201,152,42,.5);margin-bottom:10px;text-align:center}
+.ovr-leagues{display:flex;gap:8px;margin-bottom:10px}
+.ovr-lg-btn{flex:1;padding:9px 4px;border-radius:8px;font-family:var(--mono);font-size:12px;
+  font-weight:600;cursor:pointer;-webkit-appearance:none;
+  border:1px solid rgba(201,152,42,.22);background:rgba(255,255,255,.05);
+  color:rgba(201,152,42,.4);text-align:center;transition:all .15s;min-height:40px}
+.ovr-lg-btn.on{background:var(--au);color:#0d1a0f;border-color:var(--au2)}
+.ovr-search-box{position:relative}
+.ovr-search-input{
+  width:100%;background:rgba(255,255,255,.09);
+  border:1px solid rgba(201,152,42,.3);border-radius:13px;
+  color:var(--cr);font-family:var(--sans);font-size:16px;
+  padding:14px 44px 14px 18px;-webkit-appearance:none;outline:none;
+  caret-color:var(--au2);
+}
+.ovr-search-input::placeholder{color:rgba(240,236,226,.3)}
+.ovr-search-input:focus{border-color:var(--au2);background:rgba(255,255,255,.13)}
+.ovr-search-clear{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:rgba(240,236,226,.4);font-size:18px;
+  cursor:pointer;padding:6px;display:none;line-height:1}
+/* Landing autocomplete */
+.ovr-ac{
+  position:absolute;left:0;right:0;top:calc(100% + 4px);
+  background:rgba(18,46,24,.99);border:1px solid rgba(201,152,42,.32);
+  border-radius:13px;z-index:400;
+  box-shadow:0 12px 40px rgba(0,0,0,.7);
+  max-height:300px;overflow-y:auto;display:none;
+}
+.ovr-ac-item{padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)}
+.ovr-ac-item:last-child{border-bottom:none}
+.ovr-ac-item:active{background:rgba(201,152,42,.18)}
+.ovr-ai-name{font-family:var(--sans);font-size:15px;color:var(--cr);margin-bottom:3px}
+.ovr-ai-meta{font-family:var(--mono);font-size:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* Live & upcoming cards */
+.ovr-section-label{font-family:var(--mono);font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:rgba(201,152,42,.45);
+  padding:14px 20px 8px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ovr-section-label::after{content:'';flex:1;height:1px;background:rgba(201,152,42,.15)}
+.ovr-events{padding:0 14px;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.ovr-ev-card{background:rgba(255,255,255,.05);border:1px solid rgba(201,152,42,.18);
+  border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s;
+  display:flex;justify-content:space-between;align-items:center;min-height:62px}
+.ovr-ev-card:active{background:rgba(201,152,42,.15);border-color:var(--au2)}
+.ovr-ev-card.live-card{border-color:rgba(244,67,54,.4);background:rgba(244,67,54,.06)}
+.oec-left{flex:1;min-width:0}
+.oec-name{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--au3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.oec-venue{font-family:var(--sans);font-size:12px;color:rgba(240,236,226,.4);margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oec-right{flex-shrink:0;text-align:right;margin-left:12px}
+.oec-status{font-family:var(--mono);font-size:11px;font-weight:700}
+.oec-status.live{color:#f44;animation:blink 1.5s infinite}
+.oec-status.done{color:#66bb6a}
+.oec-status.up{color:rgba(201,152,42,.55)}
+.oec-leader{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.55);margin-top:2px}
+.oec-arr{font-size:18px;color:rgba(201,152,42,.35);margin-left:8px;flex-shrink:0}
+.ovr-loading{text-align:center;padding:24px;font-family:var(--mono);font-size:12px;
+  color:rgba(201,152,42,.4)}
+
+/* Bottom GPS strip */
+.ovr-gps-strip{flex-shrink:0;margin-top:20px;padding:16px 20px 36px;
+  border-top:1px solid rgba(201,152,42,.12);display:flex;flex-direction:column;gap:10px;align-items:center}
+.ovr-gps-btn{background:var(--au);color:#0d1a0f;border:none;padding:14px 32px;
+  border-radius:13px;font-family:var(--serif);font-size:17px;font-weight:700;
+  cursor:pointer;-webkit-appearance:none;min-height:52px;width:100%;max-width:320px}
+.ovr-gps-btn:active{transform:scale(.97)}
+.ovr-skip{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.38);
+  cursor:pointer;text-decoration:underline;padding:8px}
+
+/* Toast */
+.toast{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(13,28,17,.95);border:1px solid rgba(201,152,42,.35);color:var(--au2);padding:10px 20px;border-radius:22px;font-family:var(--mono);font-size:13px;z-index:9000;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.toast.show{opacity:1}
+
+.leaflet-control-zoom{border:1px solid rgba(201,152,42,.28)!important;border-radius:7px!important;overflow:hidden}
+.leaflet-control-zoom a{background:rgba(13,28,17,.95)!important;color:var(--au2)!important;border-color:rgba(201,152,42,.18)!important}
+.leaflet-control-attribution{font-size:8px!important;background:rgba(0,0,0,.45)!important;color:rgba(255,255,255,.28)!important}
+.leaflet-control-attribution a{color:rgba(255,255,255,.28)!important}
+/* Make draggable markers more obvious */
+.draggable-tee,.draggable-green{cursor:grab!important}
+.draggable-tee:active,.draggable-green:active{cursor:grabbing!important}
+
+/* ── LIVE TRACKER PANE ── */
+#pLive{display:none;flex-direction:column;background:#f5f1e8}
+#pLive.on{display:flex}
+
+/* Search bar */
+.live-search-wrap{
+  flex-shrink:0;background:var(--g);
+  padding:10px 12px 8px;
+  border-bottom:1px solid rgba(201,152,42,.2);
+  position:relative;
+}
+.live-search-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.live-search-title{font-family:var(--serif);font-size:17px;color:var(--au3);font-weight:700;flex:1}
+.live-refresh-btn{
+  background:rgba(201,152,42,.14);border:1px solid rgba(201,152,42,.28);color:var(--au2);
+  padding:6px 10px;border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer;
+  -webkit-appearance:none;min-height:40px;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;flex-shrink:0}
+.live-refresh-btn.load{opacity:.5;pointer-events:none}
+.live-refresh-btn .rfsh-icon{font-size:14px;transition:transform .3s}
+.live-refresh-btn.load .rfsh-icon{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Countdown ring */
+.rfsh-ring{flex-shrink:0;width:20px;height:20px;position:relative}
+.rfsh-ring svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.rfsh-ring-track{fill:none;stroke:rgba(201,152,42,.18);stroke-width:2.5}
+.rfsh-ring-fill{fill:none;stroke:var(--au2);stroke-width:2.5;stroke-linecap:round;
+  stroke-dasharray:56.5;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear}
+.rfsh-ring-fill.paused{stroke:rgba(201,152,42,.3);transition:none}
+/* Auto-refresh status chip in status bar */
+.auto-rfsh-chip{
+  font-family:var(--mono);font-size:10px;color:rgba(201,152,42,.55);
+  display:flex;align-items:center;gap:4px;white-space:nowrap}
+.arc-dot{width:5px;height:5px;border-radius:50%;background:rgba(201,152,42,.4)}
+.arc-dot.live{background:#4caf50;animation:blink .9s infinite}
+.arc-dot.paused{background:rgba(201,152,42,.3)}
+.live-search-box{
+  position:relative;
+}
+.live-search-input{
+  width:100%;background:rgba(255,255,255,.08);
+  border:1px solid rgba(201,152,42,.25);border-radius:10px;
+  color:var(--cr);font-family:var(--sans);font-size:15px;
+  padding:10px 38px 10px 14px;-webkit-appearance:none;outline:none;
+  caret-color:var(--au2);
+}
+.live-search-input::placeholder{color:rgba(240,236,226,.3)}
+.live-search-input:focus{border-color:var(--au2);background:rgba(255,255,255,.12)}
+.live-clear-btn{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:rgba(240,236,226,.4);font-size:18px;
+  cursor:pointer;padding:4px;display:none;line-height:1;
+}
+/* Autocomplete dropdown */
+.live-ac-list{
+  position:absolute;left:0;right:0;top:100%;margin-top:3px;
+  background:rgba(20,48,26,.98);border:1px solid rgba(201,152,42,.3);
+  border-radius:10px;overflow:hidden;z-index:200;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);
+  max-height:220px;overflow-y:auto;
+  display:none;
+}
+.live-ac-item{
+  padding:12px 16px;font-family:var(--sans);font-size:15px;color:var(--cr);
+  cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.live-ac-item:last-child{border-bottom:none}
+.live-ac-item:active,.live-ac-item.hi{background:rgba(201,152,42,.18)}
+.live-ac-pos{font-family:var(--mono);font-size:12px;color:rgba(201,152,42,.6)}
+.live-ac-score{font-family:var(--mono);font-size:13px;font-weight:600}
+
+/* Status + count bar */
+.live-status-bar{
+  flex-shrink:0;
+  background:#e8e4da;border-bottom:1px solid rgba(0,0,0,.07);
+  padding:7px 14px;display:flex;justify-content:space-between;align-items:center;
+}
+.live-count{font-family:var(--mono);font-size:11px;color:var(--sh)}
+
+/* Scrollable table area */
+.live-table-wrap{
+  flex:1;overflow-y:auto;overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Highlighted (searched) player row */
+.lb-tbl tr.live-hi td{
+  background:#fff9e6!important;
+  border-left:3px solid var(--au);
+}
+.lb-tbl tr.live-hi td:first-child{border-left:3px solid var(--au)}
+
+/* Hole info pill inside table */
+.hole-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--g);color:var(--au2);
+  border-radius:5px;padding:2px 6px;
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  white-space:nowrap;
+}
+.hole-pill.done{background:#2e7d32;color:white}
+.hole-pill.par3{border-left:2px solid #5dade2}
+.hole-pill.par4{border-left:2px solid var(--au)}
+.hole-pill.par5{border-left:2px solid #66bb6a}
+
+/* No data state */
+.live-empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:32px 20px;text-align:center;
+}
+.live-empty p{font-family:var(--sans);font-size:15px;color:var(--sh);line-height:1.65}
+.live-load-btn{background:var(--g);color:var(--au3);border:1px solid rgba(201,152,42,.3);
+  padding:13px 28px;border-radius:11px;font-family:var(--serif);font-size:16px;
+  font-weight:700;cursor:pointer;min-height:48px}
+
+/* ── TOURNAMENT SEARCH ── */
+.tourn-section{
+  flex-shrink:0;background:var(--g2);
+  border-bottom:2px solid rgba(201,152,42,.25);
+  padding:9px 12px 10px;
+}
+.tourn-label{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:rgba(201,152,42,.5);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.tourn-label::after{content:'';flex:1;height:1px;background:rgba(201,152,42,.15)}
+.tourn-leagues{display:flex;gap:6px;margin-bottom:8px}
+.lg-btn{flex:1;padding:7px 4px;border-radius:7px;font-family:var(--mono);font-size:11px;font-weight:600;
+  cursor:pointer;-webkit-appearance:none;border:1px solid rgba(201,152,42,.2);
+  background:rgba(255,255,255,.04);color:rgba(201,152,42,.45);text-align:center;transition:all .15s;min-height:36px}
+.lg-btn.on{background:var(--au);color:#0d1a0f;border-color:var(--au2)}
+.lg-btn:active{transform:scale(.95)}
+.tourn-search-box{position:relative}
+.tourn-input{
+  width:100%;background:rgba(255,255,255,.07);
+  border:1px solid rgba(201,152,42,.22);border-radius:9px;
+  color:var(--cr);font-family:var(--sans);font-size:14px;
+  padding:9px 36px 9px 13px;-webkit-appearance:none;outline:none;
+  caret-color:var(--au2);
+}
+.tourn-input::placeholder{color:rgba(240,236,226,.28)}
+.tourn-input:focus{border-color:var(--au2);background:rgba(255,255,255,.11)}
+.tourn-clear{position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:rgba(240,236,226,.35);font-size:17px;
+  cursor:pointer;padding:4px;display:none;line-height:1}
+.tourn-ac{
+  position:absolute;left:0;right:0;top:calc(100% + 3px);
+  background:rgba(18,42,22,.99);border:1px solid rgba(201,152,42,.3);
+  border-radius:10px;z-index:300;
+  box-shadow:0 10px 32px rgba(0,0,0,.6);
+  max-height:260px;overflow-y:auto;
+  display:none;
+}
+.tourn-ac-item{
+  padding:11px 14px;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.tourn-ac-item:last-child{border-bottom:none}
+.tourn-ac-item:active,.tourn-ac-item.ach{background:rgba(201,152,42,.15)}
+.tai-name{font-family:var(--sans);font-size:14px;color:var(--cr);margin-bottom:2px}
+.tai-meta{font-family:var(--mono);font-size:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tai-league{padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px}
+.tai-pga{background:rgba(26,90,92,.7);color:#5dede4}
+.tai-liv{background:rgba(92,26,26,.7);color:#f77}
+.tai-date{color:rgba(201,152,42,.5)}
+.tai-status-live{color:#f44;font-weight:700}
+.tai-status-done{color:#66bb6a}
+.tai-status-up{color:rgba(201,152,42,.5)}
+
+/* Selected tournament pill */
+.tourn-pill{
+  display:none;align-items:center;gap:8px;
+  background:rgba(201,152,42,.12);border:1px solid rgba(201,152,42,.28);
+  border-radius:8px;padding:7px 11px;margin-top:6px;
+}
+.tourn-pill.show{display:flex}
+.tp-name{flex:1;font-family:var(--sans);font-size:13px;color:var(--au2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-change{background:none;border:none;color:rgba(240,236,226,.4);font-size:13px;
+  cursor:pointer;padding:2px 6px;font-family:var(--mono);white-space:nowrap}
+
+/* Winner banner */
+.winner-banner{
+  background:linear-gradient(135deg,rgba(20,48,26,.98),rgba(29,66,38,.98));
+  border-bottom:2px solid var(--au);
+  padding:12px 14px;flex-shrink:0;
+}
+.wb-row1{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.wb-trophy{font-size:24px;flex-shrink:0}
+.wb-winner{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--au3);line-height:1}
+.wb-score{font-family:var(--mono);font-size:14px;font-weight:700;color:#66bb6a}
+.wb-meta{font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.5);line-height:1.6}
+.wb-next{background:rgba(201,152,42,.1);border-radius:6px;padding:5px 10px;
+  margin-top:6px;font-family:var(--mono);font-size:11px;color:rgba(201,152,42,.6);
+  display:inline-flex;gap:5px;align-items:center}
+
+
+/* ── LIVE TRACKER ADDITIONS ── */
+.tourn-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.tourn-label-txt{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(201,152,42,.55)}
+.live-subtabs{display:flex;flex-shrink:0;background:#e8e4da;border-bottom:1px solid rgba(0,0,0,.1)}
+.lstab{flex:1;padding:9px 4px;font-family:var(--mono);font-size:12px;font-weight:600;
+  background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;
+  color:var(--sh);-webkit-appearance:none;min-height:40px}
+.lstab.on{color:var(--g);border-bottom-color:var(--g);background:rgba(20,48,26,.06)}
+.live-panel{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.player-search-wrap{flex-shrink:0;padding:8px 10px;background:#f0ece2;border-bottom:1px solid rgba(0,0,0,.07)}
+/* Tee time rows */
+.tt-row{display:flex;gap:0;border-bottom:1px solid rgba(0,0,0,.07);background:#fff}
+.tt-row:nth-child(even){background:#faf8f3}
+.tt-time{min-width:80px;padding:9px 10px;font-family:var(--mono);font-size:12px;font-weight:700;
+  color:var(--g);border-right:1px solid rgba(0,0,0,.07);display:flex;align-items:center}
+.tt-hole-num{font-size:10px;color:rgba(0,0,0,.3);font-weight:400;margin-left:4px}
+.tt-players{flex:1;padding:7px 10px;font-family:var(--sans);font-size:13px;color:#1a2e1a;line-height:1.55}
+.tt-player-row{display:flex;align-items:center;gap:6px}
+.tt-flag{font-size:12px}
+.tt-score-pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.06)}
+.tt-none{padding:18px 14px;font-family:var(--mono);font-size:12px;color:var(--sh);text-align:center;line-height:1.6}
+.tt-official-link{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;
+  background:#f5f1e6;border-bottom:1px solid rgba(0,0,0,.08);flex-shrink:0}
+.tt-official-link a{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--au);text-decoration:none}
+.tt-round-hdr{background:var(--g);padding:7px 12px 6px;
+  font-family:var(--mono);font-size:11px;letter-spacing:1px;color:rgba(201,152,42,.7);
+  text-transform:uppercase;position:sticky;top:0;z-index:5}
+/* Known tee times hardcoded for Bay Hill R3/R4 */
+.tt-hardcoded-note{padding:6px 12px;background:rgba(201,152,42,.1);
+  font-family:var(--mono);font-size:10px;color:rgba(201,152,42,.7);border-bottom:1px solid rgba(201,152,42,.15)}
+
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="ovr" id="ovr">
+
+  <!-- Branding -->
+  <div class="ovr-header">
+    <span class="ovr-logo">📌</span>
+    <div class="ovr-appname">PinSheet</div>
+    <div class="ovr-tagline">Every tour. Every tournament. Right now.</div>
+  </div>
+
+  <!-- Tournament search -->
+  <div class="ovr-search-panel">
+    <div class="ovr-search-label">Find a Tournament</div>
+    <div class="ovr-leagues">
+      <button class="ovr-lg-btn on" id="ovrLgPGA" onclick="ovrSetLeague('pga')">PGA Tour</button>
+      <button class="ovr-lg-btn" id="ovrLgLIV" onclick="ovrSetLeague('liv')">LIV Golf</button>
+      <button class="ovr-lg-btn" id="ovrLgBOTH" onclick="ovrSetLeague('both')">Both</button>
+    </div>
+    <div class="ovr-search-box">
+      <input class="ovr-search-input" id="ovrSearchInput" type="text"
+        placeholder="Tournament name, city, or course…"
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        oninput="ovrOnSearch(this.value)"
+        onfocus="ovrShowAc()"
+        onblur="ovrHideAcDelay()">
+      <button class="ovr-search-clear" id="ovrSearchClear" onclick="ovrClearSearch()">✕</button>
+      <div class="ovr-ac" id="ovrAc"></div>
+    </div>
+  </div>
+
+  <!-- Live & upcoming section -->
+  <div class="ovr-section-label" id="ovrEvLabel">🟢 Now Playing &amp; Coming Soon</div>
+  <div class="ovr-events" id="ovrEvents">
+    <div class="ovr-loading">⛳ Loading current events…</div>
+  </div>
+
+  <!-- GPS / course tools -->
+  <div class="ovr-gps-strip" id="ovrGpsStrip">
+    <div class="ovr-search-label" id="ovrGpsLabel" style="width:100%;text-align:center;padding:0 0 4px">Select a tournament above, or use Bay Hill GPS</div>
+    <button class="ovr-gps-btn" id="ovrGpsBtn" onclick="startGPS()">📍 Enable GPS</button>
+    <div class="ovr-skip" id="ovrGpsSkip" onclick="skipGPS()">Enter app without GPS</div>
+  </div>
+
+</div>
+
+<div id="topbar">
+  <div class="tb-brand" title="PinSheet Home" onclick="showHome()" style="font-family:var(--serif);font-size:18px;color:var(--au2);cursor:pointer;width:var(--SW);white-space:nowrap" title="Go to home">📌</div>
+  <div class="tb-tabs">
+    <button class="tab on" onclick="sw('Play')" id="tabPlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>Play</button>
+    <button class="tab" onclick="sw('Map')" id="tabMap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Map</button>
+    <button class="tab" onclick="sw('Tour')" id="tabTour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>Tour</button>
+    <button class="tab" onclick="sw('Live')" id="tabLive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Live</button>
+    <button class="tab" onclick="sw('Card')" id="tabCard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="3"/></svg>Card</button>
+    <button class="tab" onclick="sw('Clubs')" id="tabClubs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="10" y2="14"/><line x1="14" y1="5" x2="19" y2="10"/></svg>Clubs</button>
+  </div>
+  <div class="tb-gps"><div class="gdot" id="gdot"></div><span id="glbl">GPS</span></div>
+</div>
+
+<div id="sidebar"></div>
+
+<div id="main">
+
+  <!-- PLAY -->
+  <div class="pane scroll on" id="pPlay">
+    <div id="ocbar" style="display:none" class="oc-bar">📍 Off course — <span id="ocDist"></span> from Bay Hill</div>
+    <div class="hole-hdr">
+      <div class="hh-info">
+        <div class="hh-hole" id="hH">Hole 1 · Par 4</div>
+        <div class="hh-meta" id="hM">461 yds · HCP 4</div>
+      </div>
+      <div class="hh-score-area">
+        <button class="sc-btn" onclick="adj(-1)">−</button>
+        <div class="hh-sc-mid">
+          <div class="hh-scnum" id="scNum">—</div>
+          <div class="hh-screl" id="scRel"></div>
+          <div class="hh-tot">Round <span id="scTot">E</span></div>
+        </div>
+        <button class="sc-btn" onclick="adj(1)">+</button>
+      </div>
+    </div>
+    <div class="sh">Distance to Green</div>
+    <div class="g3">
+      <div class="gc"><div class="gc-l">Front</div><div class="gc-v" id="dF">—</div><div class="gc-u">yds</div></div>
+      <div class="gc mid"><div class="gc-l">Center</div><div class="gc-v" id="dC">—</div><div class="gc-u">yds</div></div>
+      <div class="gc"><div class="gc-l">Back</div><div class="gc-v" id="dB">—</div><div class="gc-u">yds</div></div>
+    </div>
+    <div class="sh">Tee Box Distances</div>
+    <div class="t4">
+      <div class="tc" style="border-top:3px solid #555"><div class="tc-l" style="color:#888">⬛ BLK</div><div class="tc-v" id="dtBk">—</div><div class="tc-s" id="ytBk">— y</div></div>
+      <div class="tc" style="border-top:3px solid #1a5276"><div class="tc-l" style="color:#5dade2">🔵 BLU</div><div class="tc-v" id="dtBl">—</div><div class="tc-s" id="ytBl">— y</div></div>
+      <div class="tc" style="border-top:3px solid #aaa"><div class="tc-l" style="color:#999">⬜ WHT</div><div class="tc-v" id="dtWh">—</div><div class="tc-s" id="ytWh">— y</div></div>
+      <div class="tc" style="border-top:3px solid #922b21"><div class="tc-l" style="color:#e74c3c">🔴 RED</div><div class="tc-v" id="dtRd">—</div><div class="tc-s" id="ytRd">— y</div></div>
+    </div>
+    <div class="sh">Hazards</div>
+    <div class="haz2" id="hazGrid"></div>
+    <div class="hole-d" id="hDesc"></div>
+  </div>
+
+  <!-- MAP -->
+  <div class="pane" id="pMap">
+    <div id="lmap"></div>
+    <!-- Toolbar at top center -->
+    <div class="map-toolbar">
+      <button class="mtb-btn" onclick="centerMap()" title="Center on GPS or hole">📍 Center</button>
+      <button class="mtb-btn" id="calModeBtn" onclick="toggleCalMode()">✏️ Edit Positions</button>
+    </div>
+    <button class="map-loc" onclick="centerMap()" style="top:52px" title="Fit hole to screen">⛳</button>
+    <!-- Normal HUD (hidden when cal mode on) -->
+    <div class="map-hud" id="mapHud">
+      <div class="mh-row1">
+        <div class="mh-title" id="mapTitle">Hole 1</div>
+        <div class="mh-stat" id="mapStat">GPS off</div>
+      </div>
+      <div class="mh-legs">
+        <div class="ml"><div class="ml-d" style="background:#222;border:2px solid #888"></div>Black <span id="lBk" style="color:rgba(240,236,226,.32)"></span></div>
+        <div class="ml"><div class="ml-d" style="background:#1a5276;border:2px solid #5dade2"></div>Blue <span id="lBl" style="color:rgba(240,236,226,.32)"></span></div>
+        <div class="ml"><div class="ml-d" style="background:#e8e8e8;border:2px solid #aaa"></div>White <span id="lWh" style="color:rgba(240,236,226,.32)"></span></div>
+        <div class="ml"><div class="ml-d" style="background:#922b21;border:2px solid #e74c3c"></div>Red <span id="lRd" style="color:rgba(240,236,226,.32)"></span></div>
+      </div>
+      <div class="mh-dists" id="mapDR" style="display:none">
+        <div><div class="mhd-l">BLACK</div><div class="mhd-v" id="mdBk">—</div></div>
+        <div><div class="mhd-l">BLUE</div><div class="mhd-v" id="mdBl">—</div></div>
+        <div><div class="mhd-l">WHITE</div><div class="mhd-v" id="mdWh">—</div></div>
+        <div><div class="mhd-l">RED</div><div class="mhd-v" id="mdRd">—</div></div>
+      </div>
+    </div>
+    <!-- Calibration panel (hidden by default) -->
+    <div class="cal-panel" id="calPanel" style="display:none">
+      <div class="cal-panel-title">
+        <span id="calPanelTitle">Edit Hole 1 Positions</span>
+        <span style="font-family:var(--mono);font-size:9px;color:rgba(201,152,42,.45)" id="calSavedBadge"></span>
+      </div>
+      <div class="cal-panel-sub" id="calPanelSub">Drag the <strong style="color:#e0b84e">T</strong> (tee) and <strong style="color:#4caf50">G</strong> (green) markers to the correct positions on the satellite image, then tap Save.</div>
+      <div class="cal-actions">
+        <button class="cal-act-btn" onclick="saveCalibration()">💾 Save Positions</button>
+        <button class="cal-act-btn" onclick="resetCalibration()">↺ Reset to Default</button>
+        <button class="cal-act-btn danger" onclick="toggleCalMode()">✕ Cancel</button>
+      </div>
+      <div class="cal-status" id="calStatus">Drag markers to correct positions</div>
+    </div>
+  </div>
+
+  <!-- TOUR -->
+  <div class="pane" id="pTour">
+    <div class="tour-hdr">
+      <div><div class="th-title">Arnold Palmer Invitational</div><div class="th-sub">BAY HILL · MAR 5–8, 2026 · $20,000,000 PURSE</div></div>
+      <button class="t-btn" id="tBtn" onclick="loadTour()">↻ Refresh</button>
+    </div>
+    <div class="tour-subtabs">
+      <button class="stab on" onclick="showTsec('tLeader')" id="stLeader">Leaderboard</button>
+      <button class="stab" onclick="showTsec('tTimes')" id="stTimes">Tee Times / All Players</button>
+    </div>
+    <div class="tour-content">
+      <div class="tsec on" id="tLeader"><div class="t-idle"><p>Live PGA Tour scores via ESPN.<br>Tap to load the full leaderboard.</p><button class="t-go" onclick="loadTour()">Load Leaderboard</button></div></div>
+      <div class="tsec" id="tTimes"><div class="tt-none">Tap "Load Leaderboard" to populate tee times.</div></div>
+    </div>
+  </div>
+
+  <!-- CARD -->
+  <div class="pane" id="pCard">
+    <div class="card-header"><div class="card-title">Scorecard — Bay Hill Par 72</div><button class="card-rst" onclick="resetRound()">RESET ROUND</button></div>
+    <table class="sc-tbl" id="scTbl"></table>
+  </div>
+
+  <!-- CLUBS -->
+  <div class="pane scroll" id="pClubs">
+    <div class="sug-box"><div class="sug-l">Suggested Club · Center Green</div><div class="sug-c" id="sugClub">—</div><div class="sug-n" id="sugNote">Enable GPS for suggestion</div></div>
+    <div class="sh">My Bag · Tap to Edit</div>
+    <div class="clubs-grid" id="clubsGrid"></div>
+  </div>
+
+  <!-- LIVE TRACKER -->
+  <div class="pane" id="pLive">
+
+    <!-- ① Tournament search bar -->
+    <div class="tourn-section">
+      <div class="tourn-label-row">
+        <span class="tourn-label-txt">🏌️ Tournament</span>
+        <div class="tourn-leagues">
+          <button class="lg-btn on" id="lgPGA" onclick="setLeague('pga')">PGA</button>
+          <button class="lg-btn" id="lgLIV" onclick="setLeague('liv')">LIV</button>
+          <button class="lg-btn" id="lgBOTH" onclick="setLeague('both')">Both</button>
+        </div>
+      </div>
+      <div class="tourn-search-box">
+        <input class="tourn-input" id="tournInput" type="text"
+          placeholder="Type tournament name, city, or course…"
+          autocomplete="off" autocorrect="off" spellcheck="false"
+          oninput="onTournSearch(this.value)"
+          onfocus="onTournFocus()"
+          onblur="hideTournAcDelay()">
+        <button class="tourn-clear" id="tournClear" onclick="clearTournSearch()" style="display:none">✕</button>
+        <div class="tourn-ac" id="tournAc"></div>
+      </div>
+      <div class="tourn-pill" id="tournPill" style="display:none">
+        <span class="tp-name" id="tournPillName">—</span>
+        <button class="tp-change" onclick="clearTournSearch()">Change ✕</button>
+      </div>
+    </div>
+
+    <!-- ② Sub-tabs: Leaderboard | Tee Times -->
+    <div class="live-subtabs">
+      <button class="lstab on" id="lstabBoard" onclick="showLiveTab('board')">📊 Leaderboard</button>
+      <button class="lstab" id="lstabTimes" onclick="showLiveTab('times')">🕐 Tee Times</button>
+    </div>
+
+    <!-- ③ Status bar -->
+    <div class="live-status-bar" id="liveStatusBar" style="display:none">
+      <div id="liveBadge"></div>
+      <div class="live-count" id="liveCount"></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div class="auto-rfsh-chip" id="autoRfshChip" style="display:none">
+          <div class="arc-dot" id="arcDot"></div>
+          <span id="arcLabel">auto</span>
+        </div>
+        <button class="live-refresh-btn" id="liveRefreshBtn" onclick="manualRefresh()">
+          <span class="rfsh-icon">↻</span>
+          <span id="rfshLabel">Refresh</span>
+          <div class="rfsh-ring" id="rfshRing" style="display:none">
+            <svg viewBox="0 0 20 20">
+              <circle class="rfsh-ring-track" cx="10" cy="10" r="9"/>
+              <circle class="rfsh-ring-fill" id="rfshRingFill" cx="10" cy="10" r="9"/>
+            </svg>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- ④ Winner banner -->
+    <div class="winner-banner" id="winnerBanner" style="display:none">
+      <div class="wb-row1">
+        <div class="wb-trophy">🏆</div>
+        <div>
+          <div class="wb-winner" id="wbWinner">—</div>
+          <div class="wb-score" id="wbScore">—</div>
+        </div>
+      </div>
+      <div class="wb-meta" id="wbMeta"></div>
+      <div class="wb-next" id="wbNext" style="display:none">📅 <span id="wbNextDate"></span></div>
+    </div>
+
+    <!-- ⑤ Leaderboard panel -->
+    <div class="live-panel" id="liveBoard">
+      <!-- Player search -->
+      <div class="player-search-wrap">
+        <div class="live-search-box">
+          <input class="live-search-input" id="liveSearchInput" type="text"
+            placeholder="🔍 Search player…" autocomplete="off" spellcheck="false"
+            oninput="onLiveSearch(this.value)" onfocus="showAc()" onblur="hideAcDelay()">
+          <button class="live-clear-btn" id="liveClearBtn" onclick="clearSearch()" style="display:none">✕</button>
+          <div class="live-ac-list" id="liveAcList"></div>
+        </div>
+      </div>
+      <div class="live-table-wrap" id="liveTableWrap">
+        <div class="live-empty">
+          <p>Search any tournament above or tap below to load the current PGA Tour event.</p>
+          <button class="live-load-btn" onclick="loadLive()">⛳ Load Current Event</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑥ Tee Times panel -->
+    <div class="live-panel" id="liveTimes" style="display:none">
+      <div class="live-table-wrap" id="liveTeeWrap">
+        <div class="live-empty">
+          <p>Load a tournament to see tee times and pairings.</p>
+          <button class="live-load-btn" onclick="loadLive()">⛳ Load Current Event</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════
+   BAY HILL CLUB & LODGE — Champion Course
+   Par 72 · 7,466 yards (Black tees, PGA Tour config)
+
+   COORDINATE NOTES:
+   Bay Hill sits at ~28.4574°N, 81.5105°W (lodge/clubhouse).
+   Course wraps around Butler Chain of Lakes to the SW/W.
+   All coordinates below are best estimates from satellite
+   and PGA Tour broadcast footage. Use Map > Edit Positions
+   to drag markers to correct locations on the satellite image.
+
+   ORIENTATION KEY:
+   - Holes 1-9 play away from the clubhouse, generally SW/W
+   - Holes 10-18 return, generally NE/E back to clubhouse
+   - Hole 6 is the famous C-shaped lake hole (SW corner)
+   - Hole 18 finishes near the water in front of the lodge
+═══════════════════════════════════════════════════════ */
+const CAL=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+function co(k,d){return CAL[k]?CAL[k]:d}
+
+/* Default coordinates — these are estimated. Use Edit Positions on the Map
+   to correct them by dragging T (tee) and G (green) markers. */
+const DEFAULT_HOLES=[
+ /* H1  Par4 461y  Dogleg left, plays NW from clubhouse area */
+ {h:1,p:4,hcp:4,ty:{bk:461,bl:428,wh:390,rd:352},
+  tee:[28.4565,-81.5060],gc:[28.4580,-81.5115],
+  hz:[{n:'Left Bunkers 310y',i:'🏖',c:[28.4569,-81.5079]},{n:'Front Green Bunker',i:'🏖',c:[28.4583,-81.5118]},{n:'Back Green Bunker',i:'🏖',c:[28.4578,-81.5112]}],
+  d:'Dogleg left. Bunkers right at 310 and trees left demand accuracy. Two bunkers guard the green front and back. A demanding opener.'},
+ /* H2  Par3 231y  Plays SW */
+ {h:2,p:3,hcp:18,ty:{bk:231,bl:211,wh:185,rd:152},
+  tee:[28.4580,-81.5115],gc:[28.4563,-81.5131],
+  hz:[{n:'Short Left Bunker',i:'🏖',c:[28.4561,-81.5135]},{n:'Back Bunker',i:'🏖',c:[28.4560,-81.5128]}],
+  d:'Long par-3. Miss short left or back bunker means a difficult up-and-down. Green slopes back to front. Take one extra club.'},
+ /* H3  Par4 434y  Dogleg left around lake, plays W */
+ {h:3,p:4,hcp:14,ty:{bk:434,bl:401,wh:368,rd:318},
+  tee:[28.4563,-81.5131],gc:[28.4545,-81.5168],
+  hz:[{n:'Lake Left',i:'💧',c:[28.4554,-81.5148]},{n:'Trench Bunkers Right',i:'🏖',c:[28.4558,-81.5139]},{n:'Water Guards Green',i:'💧',c:[28.4542,-81.5172]}],
+  d:'Dogleg left around a lake. Three-metal off tee — water left, trench bunkers right. Long narrow green with water still in play.'},
+ /* H4  Par5 590y  Long par-5, creek right, plays N then W */
+ {h:4,p:5,hcp:10,ty:{bk:590,bl:545,wh:495,rd:435},
+  tee:[28.4545,-81.5168],gc:[28.4574,-81.5208],
+  hz:[{n:'Creek Entire Right',i:'💧',c:[28.4556,-81.5186]},{n:'Long Bunkers Left',i:'🏖',c:[28.4550,-81.5178]},{n:'Green Entrance',i:'🏖',c:[28.4573,-81.5215]}],
+  d:'Creek runs the entire right side. Long bunkers left. Big hitters can reach in two but the entrance is guarded. Classic risk-reward par-5.'},
+ /* H5  Par4 390y  Short par-4, plays NE */
+ {h:5,p:4,hcp:8,ty:{bk:390,bl:358,wh:325,rd:280},
+  tee:[28.4574,-81.5208],gc:[28.4600,-81.5183],
+  hz:[{n:'Three Fairway Bunkers',i:'🏖',c:[28.4583,-81.5200]},{n:'Green Bunkers',i:'🏖',c:[28.4602,-81.5180]}],
+  d:'Short par-4. Big hitters can fly three fairway bunkers and leave a short pitch. Elevated rectangular green. Best birdie chance on the front nine.'},
+ /* H6  Par5 555y  ICONIC C-shaped lake hole, plays SW around lake */
+ {h:6,p:5,hcp:2,ty:{bk:555,bl:516,wh:468,rd:408},
+  tee:[28.4600,-81.5183],gc:[28.4612,-81.5115],
+  hz:[{n:'Circular Lake (center)',i:'💧',c:[28.4594,-81.5148]},{n:'Water Left at Green',i:'💧',c:[28.4614,-81.5125]},{n:'Four Green Bunkers',i:'🏖',c:[28.4610,-81.5108]}],
+  d:'🌊 The iconic C-shaped par-5 wrapped around a glassy circular lake. Florida\'s most photographed hole. John Daly made 18 here in 1998. Bryson drove the green in 2021.'},
+ /* H7  Par3 199y  Plays NE toward fairway area */
+ {h:7,p:3,hcp:16,ty:{bk:199,bl:182,wh:158,rd:124},
+  tee:[28.4612,-81.5115],gc:[28.4622,-81.5082],
+  hz:[{n:'Front Left Bunker',i:'🏖',c:[28.4620,-81.5090]},{n:'Front Right Bunker',i:'🏖',c:[28.4622,-81.5078]},{n:'Back Bunkers',i:'🏖',c:[28.4624,-81.5079]}],
+  d:'Shortest par-3. Four bunkers — two front, two back. Multi-tiered green. Stay below the hole at all costs.'},
+ /* H8  Par4 460y  Pond fronts green, dogleg right, plays E */
+ {h:8,p:4,hcp:6,ty:{bk:460,bl:425,wh:386,rd:330},
+  tee:[28.4622,-81.5082],gc:[28.4607,-81.5038],
+  hz:[{n:'Pond Fronts Green',i:'💧',c:[28.4607,-81.5045]},{n:'Left Bunker 300y',i:'🏖',c:[28.4616,-81.5060]},{n:'Back Right Bunker',i:'🏖',c:[28.4604,-81.5033]}],
+  d:'Dogleg right. Pond fronts the green making approach from rough a nightmare. Slope from back to front runs toward the water.'},
+ /* H9  Par4 480y  Long par-4, plays S back toward clubhouse */
+ {h:9,p:4,hcp:12,ty:{bk:480,bl:448,wh:408,rd:355},
+  tee:[28.4607,-81.5038],gc:[28.4565,-81.5048],
+  hz:[{n:'Left Bunker 300y',i:'🏖',c:[28.4595,-81.5042]},{n:'Front Green Bunkers',i:'🏖',c:[28.4567,-81.5052]}],
+  d:'Long par-4 heading back toward the clubhouse. Bunkers front-left and right guard the green. Make the turn in good shape.'},
+ /* H10 Par4 400y  Back nine opener, short dogleg right */
+ {h:10,p:4,hcp:13,ty:{bk:400,bl:373,wh:340,rd:295},
+  tee:[28.4565,-81.5048],gc:[28.4546,-81.5012],
+  hz:[{n:'Fairway Bunker',i:'🏖',c:[28.4558,-81.5032]},{n:'Corner Trees Right',i:'🌲',c:[28.4550,-81.5018]}],
+  d:'Short par-4 opens the back nine. High-risk dogleg right — cut the corner over trees. Slightly uphill approach. Grab this birdie early.'},
+ /* H11 Par4 438y  Pond left, bunkers right, plays NW */
+ {h:11,p:4,hcp:9,ty:{bk:438,bl:406,wh:369,rd:313},
+  tee:[28.4546,-81.5012],gc:[28.4529,-81.5050],
+  hz:[{n:'Pond Left Side',i:'💧',c:[28.4538,-81.5030]},{n:'Fairway Bunkers Right',i:'🏖',c:[28.4542,-81.5020]},{n:'Green Right Bunker',i:'🏖',c:[28.4528,-81.5045]}],
+  d:'One of Tour\'s hardest par-4s. Pond left, bunkers right. Long narrow green. A par here is a good score.'},
+ /* H12 Par5 574y  Smallest green, plays W/SW */
+ {h:12,p:5,hcp:3,ty:{bk:574,bl:535,wh:487,rd:425},
+  tee:[28.4529,-81.5050],gc:[28.4513,-81.5112],
+  hz:[{n:'Fairway Bunkers',i:'🏖',c:[28.4521,-81.5080]},{n:'Smallest Green On Course',i:'⛳',c:[28.4513,-81.5112]}],
+  d:'Par-5 with the smallest, most angled green on the course (nearly 45 degrees). Eagle-hunters face a tiny window. Control over power.'},
+ /* H13 Par4 382y  HCP1 hardest hole, plays N */
+ {h:13,p:4,hcp:1,ty:{bk:382,bl:350,wh:315,rd:272},
+  tee:[28.4513,-81.5112],gc:[28.4531,-81.5148],
+  hz:[{n:'Fairway Narrows',i:'🏖',c:[28.4520,-81.5128]},{n:'Front Bunker',i:'🏖',c:[28.4529,-81.5152]},{n:'Back Left Bunker',i:'🏖',c:[28.4533,-81.5150]}],
+  d:'HCP 1 — hardest hole on the card. Short par-4 but bunkers pinch the fairway. Angled green creates a small window. Par here is a victory.'},
+ /* H14 Par3 215y  Fronting pond, rocky barrier, plays E */
+ {h:14,p:3,hcp:17,ty:{bk:215,bl:196,wh:168,rd:128},
+  tee:[28.4531,-81.5148],gc:[28.4540,-81.5115],
+  hz:[{n:'Fronting Pond',i:'💧',c:[28.4538,-81.5120]},{n:'Rocky Barrier',i:'🪨',c:[28.4539,-81.5118]},{n:'Sand Traps',i:'🏖',c:[28.4542,-81.5111]}],
+  d:'Rocky barrier separates the green from the fronting pond. Long narrow green slopes right to left. Fairway narrows to 21 yards.'},
+ /* H15 Par4 467y  Hardest hole plays SE */
+ {h:15,p:4,hcp:5,ty:{bk:467,bl:436,wh:397,rd:340},
+  tee:[28.4540,-81.5115],gc:[28.4556,-81.5073],
+  hz:[{n:'Pond Approach Left',i:'💧',c:[28.4545,-81.5095]},{n:'Crosswind Tee Shot',i:'💨',c:[28.4542,-81.5110]},{n:'Punishing Rough Right',i:'🌿',c:[28.4558,-81.5068]}],
+  d:'50th toughest hole on Tour. Brutal downhill tee shot with crosswinds. Pond guards the approach left. Hardest hole on the course.'},
+ /* H16 Par5 511y  Easiest hole, dogleg, plays NE */
+ {h:16,p:5,hcp:7,ty:{bk:511,bl:478,wh:433,rd:378},
+  tee:[28.4556,-81.5073],gc:[28.4578,-81.5040],
+  hz:[{n:'Dogleg Trees',i:'🌲',c:[28.4563,-81.5060]},{n:'Narrow Fairway',i:'🌿',c:[28.4568,-81.5052]}],
+  d:'Easiest hole on the course. Short par-5 with a dogleg, green hidden from tee. Go get your birdie.'},
+ /* H17 Par3 221y  Redesigned 2025, fronting pond, plays SE */
+ {h:17,p:3,hcp:15,ty:{bk:221,bl:201,wh:172,rd:135},
+  tee:[28.4578,-81.5040],gc:[28.4562,-81.5018],
+  hz:[{n:'Fronting Pond',i:'💧',c:[28.4565,-81.5025]},{n:'Redesigned 2025',i:'⚠️',c:[28.4563,-81.5022]}],
+  d:'Redesigned before 2025 API. Beach bunker removed, water now closer to the green. One of Tour\'s toughest par-3s.'},
+ /* H18 Par4 458y  Iconic closer, water left, plays to clubhouse SE */
+ {h:18,p:4,hcp:11,ty:{bk:458,bl:429,wh:390,rd:340},
+  tee:[28.4562,-81.5018],gc:[28.4570,-81.4980],
+  hz:[{n:'Water Left — Full Hole',i:'💧',c:[28.4564,-81.5000]},{n:'Final Pond at Green',i:'💧',c:[28.4570,-81.4990]},{n:'Three Green Bunkers',i:'🏖',c:[28.4568,-81.4975]}],
+  d:'🏆 Bay Hill\'s iconic closer. Carry the final pond to a banana-shaped green wedged between three bunkers and jagged rocks. Tiger 2008. Rory 2018. This is Bay Hill.'}
+];
+
+/* Apply any user calibrations on top of defaults */
+const HOLES=DEFAULT_HOLES.map((h,i)=>{
+  const n=h.h;
+  return {
+    ...h,
+    tee:co(n+'t', h.tee),
+    g:{
+      c:co(n+'gc', h.gc),
+      f:co(n+'gf', computeGf(co(n+'t',h.tee), co(n+'gc',h.gc))),
+      b:co(n+'gb', computeGb(co(n+'t',h.tee), co(n+'gc',h.gc)))
+    }
+  };
+});
+function computeGf(tee,gc){const off=(gc[0]-tee[0])*0.08,ofl=(gc[1]-tee[1])*0.08;return[gc[0]-off,gc[1]-ofl]}
+function computeGb(tee,gc){const off=(gc[0]-tee[0])*0.08,ofl=(gc[1]-tee[1])*0.08;return[gc[0]+off,gc[1]+ofl]}
+
+const CEN=[28.4574,-81.5105], ON_M=1600;
+const DEF_CLUBS=[{n:'Driver',y:250},{n:'3 Wood',y:225},{n:'5 Wood',y:210},{n:'4 Iron',y:195},{n:'5 Iron',y:185},{n:'6 Iron',y:172},{n:'7 Iron',y:160},{n:'8 Iron',y:148},{n:'9 Iron',y:135},{n:'PW',y:120},{n:'GW',y:105},{n:'SW',y:90},{n:'LW',y:70}];
+let H=0, scores=JSON.parse(localStorage.getItem('bh_sc9')||'null')||new Array(18).fill(null);
+let clubs=JSON.parse(localStorage.getItem('bh_cl9')||'null')||DEF_CLUBS.map(c=>({...c}));
+let uLat=null,uLng=null,curV='Play',mapInited=false,lmap=null,mM={};
+let calMode=false, calTeeMarker=null, calGreenMarker=null;
+
+/* ── MATH ── */
+function hav(a1,o1,a2,o2){const R=6371000,da=(a2-a1)*Math.PI/180,doo=(o2-o1)*Math.PI/180,s=Math.sin(da/2)**2+Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(doo/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s))}
+function m2y(m){return Math.round(m*1.09361)}
+function teePt(bk,gc,bkY,tY){if(tY>=bkY)return[...bk];const cl=Math.cos(bk[0]*Math.PI/180),dlm=(gc[0]-bk[0])*111000,dlg=(gc[1]-bk[1])*111000*cl,d=Math.sqrt(dlm*dlm+dlg*dlg);if(d<1)return[...bk];const mv=(bkY-tY)*0.9144;return[bk[0]+(dlm/d*mv)/111000,bk[1]+(dlg/d*mv)/(111000*cl)]}
+function getTees(i){const h=HOLES[i];return{bk:[...h.tee],bl:teePt(h.tee,h.g.c,h.ty.bk,h.ty.bl),wh:teePt(h.tee,h.g.c,h.ty.bk,h.ty.wh),rd:teePt(h.tee,h.g.c,h.ty.bk,h.ty.rd)}}
+
+/* ── GPS ── */
+// startGPS and skipGPS are defined later in the PINSHEET LANDING section
+// to support tournament-aware navigation after GPS choice
+function gok(p){uLat=p.coords.latitude;uLng=p.coords.longitude;dot('live');lbl('±'+Math.round(p.coords.accuracy)+'m');if(mapInited&&!calMode)mapGPS();updateDists()}
+function gerr(e){dot('fail');const pol=e.code===1&&e.message&&e.message.toLowerCase().includes('permissions policy');lbl(pol?'IFRAME':e.code===1?'DENIED':e.code===2?'N/A':'T/O')}
+function dot(c){document.getElementById('gdot').className='gdot '+c}
+function lbl(t){document.getElementById('glbl').textContent=t}
+function s(id,v){const e=document.getElementById(id);if(e)e.textContent=v}
+
+/* ── TOAST ── */
+function toast(msg,dur=2000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)}
+
+/* ── SIDEBAR ── */
+function buildSidebar(){
+  const el=document.getElementById('sidebar');
+  const cal=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+  el.innerHTML=HOLES.map((h,i)=>{
+    let c='hbtn';if(i===H)c+=' on';if(scores[i]!==null)c+=' done';
+    const isCal=cal[(i+1)+'t']||cal[(i+1)+'gc'];
+    if(isCal)c+=' cal';
+    return`<button class="${c}" onclick="gotoH(${i})" title="Hole ${h.h} Par ${h.p}">${h.h}</button>`;
+  }).join('');
+}
+
+/* ── RENDER ── */
+function render(){
+  const h=HOLES[H];
+  s('hH','Hole '+h.h+' · Par '+h.p);
+  s('hM',h.ty.bk+' yds · HCP '+h.hcp);
+  s('hDesc',h.d);
+  s('lBk',h.ty.bk+'y');s('lBl',h.ty.bl+'y');s('lWh',h.ty.wh+'y');s('lRd',h.ty.rd+'y');
+  s('mapTitle','Hole '+h.h+' · Par '+h.p+' · '+h.ty.bk+' yds');
+  s('ytBk',h.ty.bk+'y');s('ytBl',h.ty.bl+'y');s('ytWh',h.ty.wh+'y');s('ytRd',h.ty.rd+'y');
+  buildSidebar();updateDists();renderScore();renderClubs();renderCard();
+  if(mapInited)renderMapHole();
+  // Update cal panel title
+  s('calPanelTitle','Edit Hole '+h.h+' Positions');
+  const cal=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+  const saved=(cal[h.h+'t']||cal[h.h+'gc']);
+  s('calSavedBadge',saved?'✓ Custom positions saved':'Using default estimates');
+}
+
+/* ── DISTANCES ── */
+function updateDists(){
+  const h=HOLES[H],t=getTees(H);
+  if(uLat!==null){
+    const dc=hav(uLat,uLng,CEN[0],CEN[1]);
+    const ob=document.getElementById('ocbar');
+    if(dc>ON_M){ob.style.display='flex';s('ocDist',(dc/1609.344).toFixed(1)+' miles')}
+    else ob.style.display='none';
+    s('dF',m2y(hav(uLat,uLng,h.g.f[0],h.g.f[1])));
+    s('dC',m2y(hav(uLat,uLng,h.g.c[0],h.g.c[1])));
+    s('dB',m2y(hav(uLat,uLng,h.g.b[0],h.g.b[1])));
+    s('dtBk',m2y(hav(uLat,uLng,t.bk[0],t.bk[1])));s('dtBl',m2y(hav(uLat,uLng,t.bl[0],t.bl[1])));
+    s('dtWh',m2y(hav(uLat,uLng,t.wh[0],t.wh[1])));s('dtRd',m2y(hav(uLat,uLng,t.rd[0],t.rd[1])));
+    document.getElementById('mapDR').style.display='grid';
+    s('mdBk',m2y(hav(uLat,uLng,t.bk[0],t.bk[1])));s('mdBl',m2y(hav(uLat,uLng,t.bl[0],t.bl[1])));
+    s('mdWh',m2y(hav(uLat,uLng,t.wh[0],t.wh[1])));s('mdRd',m2y(hav(uLat,uLng,t.rd[0],t.rd[1])));
+    document.getElementById('mapStat').textContent='GPS active';
+    suggestClub(m2y(hav(uLat,uLng,h.g.c[0],h.g.c[1])));
+  } else {
+    document.getElementById('ocbar').style.display='none';
+    ['dF','dC','dB','dtBk','dtBl','dtWh','dtRd'].forEach(id=>s(id,'—'));
+  }
+  document.getElementById('hazGrid').innerHTML=h.hz.map(z=>{
+    const d=uLat!==null?m2y(hav(uLat,uLng,z.c[0],z.c[1])):'—';
+    return`<div class="hc"><div class="hc-i">${z.i||'⚠️'}</div><div><div class="hc-n">${z.n}</div><div class="hc-d">${d}</div></div></div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════
+   MAP
+══════════════════════════════════ */
+function initMap(){
+  if(mapInited)return;
+  const h=HOLES[H];
+  lmap=L.map('lmap',{zoomControl:true,attributionControl:true}).setView(h.g.c,17);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:21}).addTo(lmap);
+  mapInited=true;
+  renderMapHole();
+  if(uLat!==null)mapGPS();
+}
+
+function clearM(){
+  Object.values(mM).forEach(m=>{if(m)try{lmap.removeLayer(m)}catch(e){}});
+  mM={};
+  if(calTeeMarker){try{lmap.removeLayer(calTeeMarker)}catch(e){} calTeeMarker=null;}
+  if(calGreenMarker){try{lmap.removeLayer(calGreenMarker)}catch(e){} calGreenMarker=null;}
+}
+
+function makeIcon(bg,bd,lb,tc,sz=20){
+  return L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+    html:`<div style="width:${sz}px;height:${sz}px;background:${bg};border:2px solid ${bd};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${sz===20?8:10}px;font-weight:700;color:${tc};font-family:monospace;box-shadow:0 2px 6px rgba(0,0,0,.7)">${lb}</div>`});
+}
+
+function renderMapHole(){
+  if(!mapInited||calMode)return;
+  clearM();
+  const h=HOLES[H],t=getTees(H);
+  // Fairway guide line
+  mM.fw=L.polyline([t.bk,h.g.c],{color:'rgba(76,175,80,.45)',weight:3,dashArray:'7,5'}).addTo(lmap);
+  // Tee markers
+  [{k:'bk',co:t.bk,bg:'#222',bd:'#999',lb:'B',tc:'#fff',nm:'Black',y:h.ty.bk},
+   {k:'bl',co:t.bl,bg:'#1a5276',bd:'#5dade2',lb:'b',tc:'#fff',nm:'Blue',y:h.ty.bl},
+   {k:'wh',co:t.wh,bg:'#eee',bd:'#bbb',lb:'W',tc:'#333',nm:'White',y:h.ty.wh},
+   {k:'rd',co:t.rd,bg:'#7b241c',bd:'#e74c3c',lb:'R',tc:'#fff',nm:'Red',y:h.ty.rd}
+  ].forEach(x=>{
+    mM[x.k]=L.marker(x.co,{icon:makeIcon(x.bg,x.bd,x.lb,x.tc)}).addTo(lmap)
+      .bindPopup(`<b>${x.nm} Tee</b> — ${x.y} yds`);
+  });
+  // Green marker
+  const gi=L.divIcon({className:'',iconSize:[28,28],iconAnchor:[14,14],
+    html:'<div style="width:28px;height:28px;background:rgba(46,125,50,.92);border:3px solid #4caf50;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 10px rgba(76,175,80,.6)">⛳</div>'});
+  mM.g=L.marker(h.g.c,{icon:gi}).addTo(lmap)
+    .bindPopup(`<b>Hole ${h.h} · Par ${h.p}</b><br>${h.ty.bk} yds`);
+  // Fit view
+  try{lmap.fitBounds(L.latLngBounds([t.bk,h.g.c,h.g.f,h.g.b]),{padding:[55,55]})}
+  catch(e){lmap.setView(h.g.c,17)}
+}
+
+function mapGPS(){
+  if(!mapInited||uLat===null||calMode)return;
+  if(mM.gps)try{lmap.removeLayer(mM.gps)}catch(e){}
+  if(mM.dl)try{lmap.removeLayer(mM.dl)}catch(e){}
+  const gi=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],
+    html:'<div style="width:16px;height:16px;background:#4caf50;border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px rgba(76,175,80,.8),0 0 0 7px rgba(76,175,80,.14)"></div>'});
+  mM.gps=L.marker([uLat,uLng],{icon:gi}).addTo(lmap).bindPopup('📍 You');
+  const dc=m2y(hav(uLat,uLng,HOLES[H].g.c[0],HOLES[H].g.c[1]));
+  mM.dl=L.polyline([[uLat,uLng],HOLES[H].g.c],{color:'#e0b84e',weight:2,dashArray:'5,4',opacity:.85}).addTo(lmap);
+}
+
+function centerMap(){
+  if(!mapInited)return;
+  if(uLat!==null)lmap.setView([uLat,uLng],18);
+  else{
+    const h=HOLES[H],t=getTees(H);
+    try{lmap.fitBounds(L.latLngBounds([t.bk,h.g.c,h.g.f,h.g.b]),{padding:[55,55]})}
+    catch(e){lmap.setView(h.g.c,17)}
+  }
+}
+
+/* ══════════════════════════════════
+   CALIBRATION MODE — Drag Tee & Green
+══════════════════════════════════ */
+function toggleCalMode(){
+  if(!mapInited)return;
+  calMode=!calMode;
+  const btn=document.getElementById('calModeBtn');
+  const hud=document.getElementById('mapHud');
+  const panel=document.getElementById('calPanel');
+  if(calMode){
+    btn.classList.add('active');btn.textContent='✏️ Editing…';
+    hud.style.display='none';
+    panel.style.display='block';
+    enterCalMode();
+  } else {
+    btn.classList.remove('active');btn.textContent='✏️ Edit Positions';
+    hud.style.display='block';
+    panel.style.display='none';
+    exitCalMode();
+  }
+}
+
+function enterCalMode(){
+  // Remove normal markers
+  Object.values(mM).forEach(m=>{if(m)try{lmap.removeLayer(m)}catch(e){}});
+  mM={};
+  const h=HOLES[H];
+  // Add BIG draggable tee marker
+  const teeIcon=L.divIcon({className:'draggable-tee',iconSize:[36,36],iconAnchor:[18,18],
+    html:'<div style="width:36px;height:36px;background:#c9982a;border:3px solid #f5d882;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#0d1a0f;font-family:monospace;box-shadow:0 0 14px rgba(201,152,42,.8),0 4px 12px rgba(0,0,0,.5);cursor:grab">T</div>'});
+  calTeeMarker=L.marker(h.tee,{icon:teeIcon,draggable:true,autoPan:true}).addTo(lmap)
+    .bindTooltip('Drag to Tee Box',{permanent:true,direction:'top',offset:[0,-20],className:'leaflet-tooltip'});
+  // Add BIG draggable green marker
+  const greenIcon=L.divIcon({className:'draggable-green',iconSize:[36,36],iconAnchor:[18,18],
+    html:'<div style="width:36px;height:36px;background:#2e7d32;border:3px solid #4caf50;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:white;font-family:monospace;box-shadow:0 0 14px rgba(76,175,80,.8),0 4px 12px rgba(0,0,0,.5);cursor:grab">G</div>'});
+  calGreenMarker=L.marker(h.g.c,{icon:greenIcon,draggable:true,autoPan:true}).addTo(lmap)
+    .bindTooltip('Drag to Green Center',{permanent:true,direction:'top',offset:[0,-20]});
+  // Draw a line between them
+  function updateLine(){
+    if(mM.calLine)try{lmap.removeLayer(mM.calLine)}catch(e){}
+    mM.calLine=L.polyline([calTeeMarker.getLatLng(),calGreenMarker.getLatLng()],
+      {color:'rgba(201,152,42,.6)',weight:2,dashArray:'6,4'}).addTo(lmap);
+    const dy=m2y(hav(calTeeMarker.getLatLng().lat,calTeeMarker.getLatLng().lng,calGreenMarker.getLatLng().lat,calGreenMarker.getLatLng().lng));
+    s('calStatus','Tee→Green: '+dy+' yds  (Black tee is '+HOLES[H].ty.bk+' yds)');
+  }
+  calTeeMarker.on('drag dragend',updateLine);
+  calGreenMarker.on('drag dragend',updateLine);
+  updateLine();
+  // Fit view to both markers
+  try{lmap.fitBounds(L.latLngBounds([h.tee,h.g.c]),{padding:[70,70]})}catch(e){}
+  // Show status
+  const cal=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+  const saved=cal[HOLES[H].h+'t']||cal[HOLES[H].h+'gc'];
+  s('calSavedBadge',saved?'✓ Custom saved':'Using defaults');
+}
+
+function exitCalMode(){
+  if(calTeeMarker){try{lmap.removeLayer(calTeeMarker)}catch(e){} calTeeMarker=null;}
+  if(calGreenMarker){try{lmap.removeLayer(calGreenMarker)}catch(e){} calGreenMarker=null;}
+  if(mM.calLine){try{lmap.removeLayer(mM.calLine)}catch(e){} delete mM.calLine;}
+  renderMapHole();
+  if(uLat!==null)mapGPS();
+}
+
+function saveCalibration(){
+  if(!calTeeMarker||!calGreenMarker){toast('No markers to save.');return;}
+  const tll=calTeeMarker.getLatLng();
+  const gll=calGreenMarker.getLatLng();
+  const tee=[tll.lat,tll.lng];
+  const gc=[gll.lat,gll.lng];
+  const cal=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+  const n=HOLES[H].h;
+  cal[n+'t']=tee;
+  cal[n+'gc']=gc;
+  cal[n+'gf']=computeGf(tee,gc);
+  cal[n+'gb']=computeGb(tee,gc);
+  localStorage.setItem('bh_cal9',JSON.stringify(cal));
+  // Update live HOLES array
+  HOLES[H].tee=tee;
+  HOLES[H].g={c:gc,f:computeGf(tee,gc),b:computeGb(tee,gc)};
+  const dy=m2y(hav(tee[0],tee[1],gc[0],gc[1]));
+  toast(`✅ Hole ${n} saved! Tee→Green: ${dy} yds`);
+  s('calSavedBadge','✓ Saved');
+  s('calStatus','✓ Positions saved for Hole '+n);
+  buildSidebar();
+  updateDists();
+}
+
+function resetCalibration(){
+  if(!confirm('Reset Hole '+HOLES[H].h+' to default estimated positions? Your custom positions will be deleted.'))return;
+  const cal=JSON.parse(localStorage.getItem('bh_cal9')||'{}');
+  const n=HOLES[H].h;
+  delete cal[n+'t'];delete cal[n+'gc'];delete cal[n+'gf'];delete cal[n+'gb'];
+  localStorage.setItem('bh_cal9',JSON.stringify(cal));
+  // Reset live HOLES
+  const def=DEFAULT_HOLES[H];
+  HOLES[H].tee=[...def.tee];
+  HOLES[H].g={c:[...def.gc],f:computeGf(def.tee,def.gc),b:computeGb(def.tee,def.gc)};
+  // Reposition draggable markers
+  if(calTeeMarker)calTeeMarker.setLatLng(HOLES[H].tee);
+  if(calGreenMarker)calGreenMarker.setLatLng(HOLES[H].g.c);
+  toast('↺ Hole '+n+' reset to default estimates');
+  s('calSavedBadge','Using defaults');
+  buildSidebar();
+  updateDists();
+}
+
+/* ══════════════════════════════════
+   TOUR — ESPN public API
+══════════════════════════════════ */
+async function loadTour(){
+  const btn=document.getElementById('tBtn');
+  btn.classList.add('load');btn.textContent='Loading…';
+  document.getElementById('tLeader').innerHTML='<div class="t-spin">⛳</div>';
+  document.getElementById('tTimes').innerHTML='<div class="t-spin">⛳</div>';
+  // Use activeTournament if one has been selected — otherwise fetch current ESPN event
+  const meta=activeTournament||null;
+  const league=meta&&meta.lg==='LIV'?'liv':'pga';
+  try{
+    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/golf/'+league+'/scoreboard');
+    if(!r.ok)throw new Error('ESPN HTTP '+r.status);
+    const data=await r.json();
+    let ev=null;
+    if(meta){
+      // Same proper-noun scoring used by Live tab
+      const GENERIC=['invitational','championship','presented','classic','memorial',
+        'national','tournament','players','open','masters','challenge','pebble','beach',
+        'with','from','the','golf','tour','pga','liv','and','for'];
+      const nameWords=(meta.n+' '+(meta.kw||'')).toLowerCase().split(/[\s\-\&,]+/).filter(w=>w.length>3);
+      const proper=[...new Set(nameWords.filter(w=>!GENERIC.includes(w)))];
+      let best=null,bestSc=0;
+      (data.events||[]).forEach(e=>{
+        const en=((e.name||'')+' '+(e.shortName||'')).toLowerCase();
+        let sc=0; proper.forEach(k=>{if(en.includes(k))sc+=5;});
+        if(sc>bestSc){bestSc=sc;best=e;}
+      });
+      ev=bestSc>=5?best:null;
+    } else {
+      // No tournament selected — grab whatever ESPN has live
+      ev=(data.events||[]).find(e=>{const s=((e.status||{}).type||{}).name||'';return s.includes('PROGRESS')||s.includes('SUSPEND')})
+        ||(data.events||[])[0]||null;
+    }
+    if(!ev){
+      const avail=(data.events||[]).map(e=>e.name||'').filter(Boolean).slice(0,3).join(', ');
+      throw new Error((meta?meta.n+' is':'No tournament is')+' not in the ESPN live feed this week.'+(avail?'\n\nAvailable: '+avail:''));
+    }
+    // Update the Tour tab header to reflect what we actually loaded
+    const nm=meta?meta.n:ev.name||'Current Event';
+    const sub=meta&&meta.v?meta.v+' · '+(meta.d||''):(ev.name||'');
+    document.querySelector('#pTour .th-title').textContent=nm;
+    document.querySelector('#pTour .th-sub').textContent=sub.toUpperCase();
+    buildLeaderboard(ev);
+    buildTeeTimes(ev);
+  }catch(e){
+    const msg='<div class="t-err">⚠️ '+e.message.replace(/\n/g,'<br>')+'<br><br><button class="t-retry" onclick="loadTour()">Try Again</button></div>';
+    document.getElementById('tLeader').innerHTML=msg;
+    document.getElementById('tTimes').innerHTML=msg;
+  }
+  btn.classList.remove('load');btn.textContent='↻ Refresh';
+}
+
+function detectStatus(ev,comps){
+  // Check ESPN status first
+  const st=((ev.status||{}).type||{});
+  if(st.name==='STATUS_FINAL'||st.completed===true||(st.description||'').toLowerCase().includes('final'))return'final';
+  // Check if all players are thru 18 or show "F"
+  const playing=comps.filter(p=>p.score!==undefined&&p.score!==null);
+  if(playing.length>5){
+    const done=playing.filter(p=>{
+      const thru=((p.status||{}).displayValue||'').toUpperCase().trim();
+      return thru==='F'||thru==='FINAL'||thru==='18'||(p.status&&p.status.type&&p.status.type.completed);
+    });
+    if(done.length===playing.length)return'final';
+    if(done.length>0)return'live';
+  }
+  if(st.name==='STATUS_IN_PROGRESS'||(st.description||'').toLowerCase().includes('progress'))return'live';
+  return'pre';
+}
+
+function buildLeaderboard(ev){
+  const comp=(ev.competitions||[])[0]||{};
+  const comps=[...(comp.competitors||[])].sort((a,b)=>{
+    const ap=parseInt(((a.status||{}).position||{}).id||9999);
+    const bp=parseInt(((b.status||{}).position||{}).id||9999);
+    if(ap!==bp)return ap-bp;
+    return(parseFloat(a.score)||0)-(parseFloat(b.score)||0);
+  });
+  const status=detectStatus(ev,comps);
+  const badge=status==='final'?'<span class="badge-done">✓ FINAL</span>':status==='live'?'<span class="badge-live">● IN PROGRESS</span>':'<span class="badge-pre">◷ UPCOMING</span>';
+  const detail=((ev.status||{}).type||{}).shortDetail||(ev.status&&ev.status.displayClock)||'';
+  let html=`<div class="tour-status-bar">${badge}<span style="font-family:var(--mono);font-size:9px;color:var(--sh)">${detail}</span></div>`;
+  html+='<div class="lb-wrap"><table class="lb-tbl"><thead><tr><th>POS</th><th>PLAYER</th><th>TOT</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>THRU</th></tr></thead><tbody>';
+  if(comps.length){
+    // Build proper tied positions: count how many share each score rank.
+    // ESPN gives us a position id (sort order) and displayName like "T3" or "3".
+    // We trust ESPN's displayName when present; otherwise compute ties ourselves.
+    const scoreMap={};
+    comps.forEach((p,i)=>{
+      const sc=p.score||'E';
+      if(!scoreMap[sc])scoreMap[sc]=[];
+      scoreMap[sc].push(i);
+    });
+    comps.forEach((p,i)=>{
+      const nm=(p.athlete||{}).displayName||'Unknown';
+      // Use ESPN's position displayName if it looks right (e.g. "1","T3","WD","CUT")
+      let pos=((p.status||{}).position||{}).displayName||'';
+      // If ESPN didn't supply it or it's just a number, compute ties ourselves
+      if(!pos||pos===''||(/^\d+$/.test(pos)&&comps.filter((_,j)=>j<comps.length&&comps[j].score===p.score).length>1)){
+        const sc=p.score||'E';
+        const tied=scoreMap[sc];
+        if(tied.length>1){
+          // position = index of first tied player + 1
+          pos='T'+(tied[0]+1);
+        } else {
+          pos=String(i+1);
+        }
+      }
+      const tot=p.score||'E';
+      const thru=((p.status||{}).displayValue)||'—';
+      const rs=(p.linescores||[]).concat([{},{},{},{}]).slice(0,4).map(x=>x&&x.value!==undefined?(x.value===0?'E':x.value>0?'+'+x.value:x.value):'—');
+      const sc=parseFloat(tot);
+      const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+      // Crown for sole leader only
+      const isLead=(pos==='1');
+      const crown=isLead&&status!=='pre'?' 👑':'';
+      // Bold first occurrence of each tied group (the "T3" row that starts the group)
+      const isFirstOfGroup=scoreMap[tot]&&scoreMap[tot][0]===i;
+      const rowStyle=isFirstOfGroup&&scoreMap[tot].length>1?'border-top:1px solid rgba(0,0,0,.08)':'';
+      html+=`<tr style="${rowStyle}"><td style="color:${isLead?'var(--au2)':'var(--sh)'};font-size:9px;font-weight:${isLead?700:400}">${pos}</td><td>${nm}${crown}</td><td class="${cls}">${tot}</td><td>${rs[0]}</td><td>${rs[1]}</td><td>${rs[2]}</td><td>${rs[3]}</td><td style="color:var(--sh)">${thru}</td></tr>`;
+    });
+  } else {
+    html+='<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--sh)">No competitor data yet</td></tr>';
+  }
+  html+='</tbody></table></div>';
+  document.getElementById('tLeader').innerHTML=html;
+}
+
+function buildTeeTimes(ev){
+  const comp=(ev.competitions||[])[0]||{};
+  const comps=comp.competitors||[];
+  // Try multiple ESPN tee time fields
+  const groups={};
+  comps.forEach(p=>{
+    const nm=(p.athlete||{}).displayName||'Unknown';
+    // Check all possible ESPN tee time locations
+    const raw=p.teeTime||p.startTime||p.startDate
+      ||(p.status&&(p.status.teeTime||p.status.startTime))
+      ||(p.athlete&&p.athlete.teeTime);
+    const grpId=p.groupId||(p.linescores&&p.linescores[0]&&p.linescores[0].groupId);
+    let key=null;
+    if(raw&&raw!=='null'&&raw!=='undefined'){key='time_'+raw}
+    else if(grpId){key='grp_'+grpId}
+    if(key){
+      if(!groups[key])groups[key]={raw,grpId,players:[]};
+      groups[key].players.push(nm);
+    }
+  });
+  const keys=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  let html='';
+  if(keys.length>0){
+    html+='<div class="tt-grp-hdr">Tee Times / Pairings</div>';
+    keys.forEach(k=>{
+      const g=groups[k];
+      let label=k;
+      if(k.startsWith('time_')&&g.raw){
+        try{
+          const d=new Date(g.raw);
+          if(!isNaN(d.getTime())){label=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York',hour12:true})+' ET';}
+          else label=g.raw;
+        }catch(e){label=g.raw}
+      } else if(k.startsWith('grp_')){
+        label='Group '+(k.replace('grp_',''));
+      }
+      html+=`<div class="tt-row"><div class="tt-time">${label}</div><div class="tt-players">${g.players.join('<br>')}</div></div>`;
+    });
+  } else {
+    // No tee times in ESPN feed — show full player list with current status so tab is useful
+    html+='<div class="tt-grp-hdr">All Players — Current Standings</div>';
+    const sorted=[...comps].sort((a,b)=>{
+      const ap=parseInt(((a.status||{}).position||{}).id||9999);
+      const bp=parseInt(((b.status||{}).position||{}).id||9999);
+      return ap-bp;
+    });
+    if(sorted.length){
+      sorted.forEach((p,i)=>{
+        const nm=(p.athlete||{}).displayName||'Unknown';
+        const pos=((p.status||{}).position||{}).displayName||String(i+1);
+        const thru=((p.status||{}).displayValue)||'—';
+        const tot=p.score||'E';
+        const sc=parseFloat(tot);
+        const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+        const ctry=(p.athlete&&p.athlete.flag&&p.athlete.flag.alt)||'';
+        html+=`<div class="tt-row"><div class="tt-time" style="font-size:10px;min-width:36px">${pos}</div><div class="tt-players">${nm}${ctry?' ('+ctry+')':''}<br><span class="tt-score ${cls}" style="font-family:var(--mono);font-size:10px">${tot}</span> <span style="font-family:var(--mono);font-size:9px;color:var(--sh)">thru ${thru}</span></div></div>`;
+      });
+      html+=`<div class="tt-none" style="background:#f0ece2">ESPN did not include tee times in this feed.<br>R4 tee times are typically posted after R3 ends.<br><a href="https://www.pgatour.com/tournaments/2026/arnold-palmer-invitational-presented-by-mastercard/R2026009/tee-times" style="color:#c9982a" target="_blank">Official tee times → pgatour.com</a></div>`;
+    } else {
+      html+=`<div class="tt-none">No data available.<br><a href="https://www.pgatour.com" style="color:#c9982a" target="_blank">pgatour.com for official tee times →</a></div>`;
+    }
+  }
+  document.getElementById('tTimes').innerHTML=html;
+}
+
+function showTsec(id){
+  document.querySelectorAll('.tsec').forEach(e=>e.classList.remove('on'));
+  document.querySelectorAll('.stab').forEach(e=>e.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  const stId='st'+id.charAt(0).toUpperCase()+id.slice(1);
+  if(document.getElementById(stId))document.getElementById(stId).classList.add('on');
+}
+
+/* ── SCORE ── */
+function renderScore(){
+  const h=HOLES[H],sc=scores[H];
+  const ne=document.getElementById('scNum'),re=document.getElementById('scRel');
+  if(sc===null){ne.textContent='—';ne.className='hh-scnum';re.textContent='';re.className='hh-screl'}
+  else{
+    ne.textContent=sc;const d=sc-h.p;
+    if(d<=-2){ne.className='hh-scnum eag';re.textContent=d===-2?'EAGLE':'ALBT';re.className='hh-screl u'}
+    else if(d===-1){ne.className='hh-scnum bir';re.textContent='BIRDIE';re.className='hh-screl u'}
+    else if(d===0){ne.className='hh-scnum';re.textContent='PAR';re.className='hh-screl e'}
+    else if(d===1){ne.className='hh-scnum bog';re.textContent='BOGEY';re.className='hh-screl o'}
+    else if(d===2){ne.className='hh-scnum dbl';re.textContent='DOUBLE';re.className='hh-screl o'}
+    else{ne.className='hh-scnum wrs';re.textContent='+'+d;re.className='hh-screl o'}
+  }
+  const played=scores.map((sv,i)=>sv!==null?sv-HOLES[i].p:null).filter(v=>v!==null);
+  const tot=played.reduce((a,b)=>a+b,0);
+  s('scTot',played.length===0?'E':tot===0?'E':tot>0?'+'+tot:''+tot);
+  localStorage.setItem('bh_sc9',JSON.stringify(scores));
+}
+function adj(d){const h=HOLES[H];scores[H]=scores[H]===null?(d>0?h.p:h.p-1):Math.max(1,scores[H]+d);renderScore();renderCard();buildSidebar()}
+function resetRound(){if(confirm('Reset all scores for this round?')){scores=new Array(18).fill(null);localStorage.removeItem('bh_sc9');render()}}
+
+/* ── CLUBS ── */
+function suggestClub(dc){
+  if(!dc||dc==='—'){s('sugClub','—');s('sugNote','Enable GPS for suggestion');return}
+  const best=clubs.filter(c=>c.y>0).reduce((b,c)=>Math.abs(c.y-dc)<Math.abs(b.y-dc)?c:b,clubs[0]),diff=best.y-dc;
+  s('sugClub',best.n);s('sugNote',diff===0?'Perfect distance':diff>0?diff+'y over — consider less club':Math.abs(diff)+'y short — add one club');
+}
+function renderClubs(){document.getElementById('clubsGrid').innerHTML=clubs.map((c,i)=>`<div class="club-row" onclick="editClub(${i})"><span class="cn">${c.n}</span><span class="cy">${c.y}<small style="font-size:10px;color:var(--sh)"> y</small></span></div>`).join('')}
+function editClub(i){const c=clubs[i],v=prompt(c.n+' — average carry (yards):',c.y);if(v&&!isNaN(parseInt(v))){clubs[i].y=parseInt(v);localStorage.setItem('bh_cl9',JSON.stringify(clubs));renderClubs()}}
+
+/* ── SCORECARD ── */
+function renderCard(){
+  const tbl=document.getElementById('scTbl');
+  let html='<thead><tr><th>HOLE</th><th>PAR</th><th>YDS</th><th>HCP</th><th>SCR</th><th>+/−</th></tr></thead><tbody>';
+  let f9s=0,f9p=0,b9s=0,b9p=0,fn=0,bn=0;
+  HOLES.forEach((h,i)=>{
+    const sc=scores[i],d=sc!==null?sc-h.p:null,cls=i===H?'cur':'';
+    let cc='';if(d!==null){if(d<=-2)cc='ca';else if(d===-1)cc='ce';else if(d===1)cc='cb';else if(d>=2)cc='cd'}
+    html+=`<tr class="${cls}"><td>${h.h}</td><td>${h.p}</td><td>${h.ty.bk}</td><td>${h.hcp}</td><td class="${cc}">${sc!==null?sc:'—'}</td><td class="${cc}">${d===null?'':d===0?'E':d>0?'+'+d:''+d}</td></tr>`;
+    if(i<9){f9p+=h.p;if(sc!==null){f9s+=sc;fn++}}else{b9p+=h.p;if(sc!==null){b9s+=sc;bn++}}
+    if(i===8){const fd=fn>0?((f9s-f9p>0?'+':'')+(f9s-f9p)):'—';html+=`<tr class="sub"><td colspan="2">OUT</td><td>${f9p}</td><td></td><td>${fn>0?f9s:'—'}</td><td>${fd}</td></tr>`}
+  });
+  const ts=f9s+b9s,n=fn+bn,td=ts-72;
+  html+=`<tr class="sub"><td colspan="2">IN</td><td>${b9p}</td><td></td><td>${bn>0?b9s:'—'}</td><td>${bn>0?(b9s-b9p>0?'+':'')+(b9s-b9p):'—'}</td></tr>`;
+  html+=`<tr class="sub"><td colspan="2">TOTAL</td><td>72</td><td></td><td>${n>0?ts:'—'}</td><td>${n>0?(td>0?'+':'')+td:'—'}</td></tr></tbody>`;
+  tbl.innerHTML=html;
+}
+
+/* ── NAV ── */
+function sw(v){
+  if(calMode&&v!=='Map'){toggleCalMode()}
+  curV=v;
+  document.querySelectorAll('.pane').forEach(e=>{e.classList.remove('on');e.style.display='none'});
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('on'));
+  const pe=document.getElementById('p'+v);
+  pe.style.display=(v==='Tour'||v==='Live')?'flex':'block';
+  pe.classList.add('on');
+  document.getElementById('tab'+v).classList.add('on');
+  if(v==='Map'){if(!mapInited)setTimeout(initMap,80);else setTimeout(()=>{lmap.invalidateSize();if(!calMode&&uLat!==null)mapGPS()},120)}
+  if(v==='Tour'){
+    // Update Tour tab header to match activeTournament
+    if(activeTournament){
+      document.querySelector('#pTour .th-title').textContent=activeTournament.n;
+      document.querySelector('#pTour .th-sub').textContent=((activeTournament.v||'')+' · '+(activeTournament.d||'')).toUpperCase();
+    }
+  }
+}
+function showHome(){
+  // Re-show the PinSheet landing overlay
+  const ovr=document.getElementById('ovr');
+  ovr.classList.remove('gone');
+  // Clear search box so it's fresh
+  const inp=document.getElementById('ovrSearchInput');
+  if(inp){inp.value='';document.getElementById('ovrSearchClear').style.display='none';document.getElementById('ovrAc').style.display='none';}
+  // Refresh the event cards each time home is opened
+  ovrEventsLoaded=false;
+  loadOvrEvents();
+}
+function gotoH(i){
+  const wasCalMode=calMode;
+  if(calMode)toggleCalMode(); // exit cal mode before switching hole
+  H=i;render();
+  if(wasCalMode&&curV==='Map')toggleCalMode(); // re-enter for new hole
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   LIVE TRACKER  —  Tournament Browser + Tee Times + Leaderboard
+   • 90+ tournament hardcoded DB (PGA Tour 2025-26, LIV 2025-26)
+   • Instant fuzzy search — no API call needed to find tournaments
+   • ESPN live API for real-time leaderboard & tee times
+   • Hardcoded Bay Hill R3/R4 tee times as fallback
+════════════════════════════════════════════════════════════ */
+
+// ── STATE ─────────────────────────────────────────────────────
+let liveData=[];
+let liveFilter='';
+let acHideTimer=null;
+let tournAcHideTimer=null;
+let activeTournament=null;
+let activeLeague='pga';
+let liveTeeHTML='';
+let liveSubTab='board';
+
+// ── TOURNAMENT DATABASE ───────────────────────────────────────
+// Fields: n=name, lg=league, v=venue, d=date, kw=search keywords
+const TOURN_DB=[
+// ── PGA TOUR 2025-26 ──
+{n:'The Sentry',lg:'PGA',v:'Plantation Course, Kapalua, Maui HI',d:'Jan 2-5, 2026',kw:'sentry kapalua maui hawaii plantation course'},
+{n:'Sony Open in Hawaii',lg:'PGA',v:'Waialae CC, Honolulu HI',d:'Jan 8-11, 2026',kw:'sony open hawaii waialae honolulu oahu'},
+{n:'The American Express',lg:'PGA',v:'PGA West, La Quinta CA',d:'Jan 16-19, 2026',kw:'american express desert classic la quinta pga west california'},
+{n:'Farmers Insurance Open',lg:'PGA',v:'Torrey Pines, San Diego CA',d:'Jan 22-25, 2026',kw:'farmers insurance torrey pines san diego california'},
+{n:'AT&T Pebble Beach Pro-Am',lg:'PGA',v:'Pebble Beach, Monterey CA',d:'Jan 29 – Feb 1, 2026',kw:'att pebble beach pro am monterey spyglass cypress point california'},
+{n:'WM Phoenix Open',lg:'PGA',v:'TPC Scottsdale, Phoenix AZ',d:'Feb 5-8, 2026',kw:'waste management wm phoenix open scottsdale arizona tpc bird cage'},
+{n:'Genesis Invitational',lg:'PGA',v:'Riviera CC, Pacific Palisades CA',d:'Feb 12-15, 2026',kw:'genesis invitational riviera country club los angeles pacific palisades tiger woods host'},
+{n:'Puerto Rico Open',lg:'PGA',v:'Grand Reserve CC, Puerto Rico',d:'Feb/Mar 2026',kw:'puerto rico open grand reserve caribbean'},
+{n:'Cognizant Classic in The Palm Beaches',lg:'PGA',v:'PGA National, Palm Beach Gardens FL',d:'Feb 26 – Mar 1, 2026',kw:'cognizant classic palm beach gardens florida pga national honda classic'},
+{n:'Arnold Palmer Invitational',lg:'PGA',v:'Bay Hill Club & Lodge, Orlando FL',d:'Mar 5-8, 2026',kw:'arnold palmer invitational bay hill orlando florida api mastercard signature event'},
+{n:'The Players Championship',lg:'PGA',v:'TPC Sawgrass, Ponte Vedra FL',d:'Mar 12-15, 2026',kw:'players championship tpc sawgrass ponte vedra florida the fifth major 17th island green'},
+{n:'Valspar Championship',lg:'PGA',v:'Innisbrook Resort, Palm Harbor FL',d:'Mar 19-22, 2026',kw:'valspar championship innisbrook resort copperhead course tampa florida'},
+{n:'Texas Childrens Houston Open',lg:'PGA',v:'Memorial Park GC, Houston TX',d:'Mar 26-29, 2026',kw:'houston open texas children memorial park golf course'},
+{n:'Masters Tournament',lg:'PGA',v:'Augusta National GC, Augusta GA',d:'Apr 9-12, 2026',kw:'masters tournament augusta national georgia green jacket major 2026'},
+{n:'RBC Heritage',lg:'PGA',v:'Harbour Town GL, Hilton Head SC',d:'Apr 16-19, 2026',kw:'rbc heritage harbour town hilton head south carolina plaid jacket'},
+{n:'Zurich Classic of New Orleans',lg:'PGA',v:'TPC Louisiana, New Orleans LA',d:'Apr 23-26, 2026',kw:'zurich classic new orleans tpc louisiana team event'},
+{n:'Wells Fargo Championship',lg:'PGA',v:'Quail Hollow Club, Charlotte NC',d:'May 7-10, 2026',kw:'wells fargo championship quail hollow charlotte north carolina'},
+{n:'PGA Championship',lg:'PGA',v:'Quail Hollow Club, Charlotte NC',d:'May 14-17, 2026',kw:'pga championship major wanamaker trophy quail hollow charlotte'},
+{n:'Charles Schwab Challenge',lg:'PGA',v:'Colonial CC, Fort Worth TX',d:'May 21-24, 2026',kw:'charles schwab challenge colonial country club fort worth texas ben hogan'},
+{n:'The CJ Cup Byron Nelson',lg:'PGA',v:'TPC Craig Ranch, McKinney TX',d:'May 28-31, 2026',kw:'cj cup byron nelson tpc craig ranch mckinney dallas texas'},
+{n:'Memorial Tournament',lg:'PGA',v:'Muirfield Village GC, Dublin OH',d:'Jun 4-7, 2026',kw:'memorial tournament muirfield village dublin ohio jack nicklaus host'},
+{n:'US Open',lg:'PGA',v:'Oakmont CC, Oakmont PA',d:'Jun 11-14, 2026',kw:'us open usga united states open championship oakmont pennsylvania major'},
+{n:'Travelers Championship',lg:'PGA',v:'TPC River Highlands, Cromwell CT',d:'Jun 18-21, 2026',kw:'travelers championship tpc river highlands cromwell connecticut'},
+{n:'Rocket Classic',lg:'PGA',v:'Detroit Golf Club, Detroit MI',d:'Jun 25-28, 2026',kw:'rocket mortgage classic detroit golf club michigan'},
+{n:'John Deere Classic',lg:'PGA',v:'TPC Deere Run, Silvis IL',d:'Jul 2-5, 2026',kw:'john deere classic tpc deere run silvis illinois quad cities'},
+{n:'Genesis Scottish Open',lg:'PGA',v:'The Renaissance Club, Scotland',d:'Jul 9-12, 2026',kw:'genesis scottish open renaissance club north berwick scotland'},
+{n:'The Open Championship',lg:'PGA',v:'Royal Portrush, Northern Ireland',d:'Jul 16-19, 2026',kw:'the open championship british open claret jug royal portrush northern ireland major'},
+{n:'3M Open',lg:'PGA',v:'TPC Twin Cities, Blaine MN',d:'Jul 23-26, 2026',kw:'3m open tpc twin cities blaine minnesota'},
+{n:'Wyndham Championship',lg:'PGA',v:'Sedgefield CC, Greensboro NC',d:'Aug 6-9, 2026',kw:'wyndham championship sedgefield country club greensboro north carolina'},
+{n:'FedEx St. Jude Championship',lg:'PGA',v:'TPC Southwind, Memphis TN',d:'Aug 13-16, 2026',kw:'fedex st jude championship tpc southwind memphis tennessee fedexcup playoffs'},
+{n:'BMW Championship',lg:'PGA',v:'Castle Pines GC, Castle Rock CO',d:'Aug 20-23, 2026',kw:'bmw championship castle pines golf club castle rock colorado fedexcup playoff'},
+{n:'Tour Championship',lg:'PGA',v:'East Lake GC, Atlanta GA',d:'Aug 27-30, 2026',kw:'tour championship east lake golf club atlanta georgia fedexcup finale'},
+{n:'Fortinet Championship',lg:'PGA',v:'Silverado Resort, Napa CA',d:'Sep 11-14, 2025',kw:'fortinet championship silverado resort napa valley california 2025'},
+{n:'Procore Championship',lg:'PGA',v:'Silverado Resort, Napa CA',d:'Sep 10-13, 2026',kw:'procore championship silverado napa california 2026'},
+{n:'Shriners Childrens Open',lg:'PGA',v:'TPC Summerlin, Las Vegas NV',d:'Oct 2-5, 2025',kw:'shriners children open las vegas tpc summerlin nevada'},
+{n:'Zozo Championship',lg:'PGA',v:'Accordia Golf Narashino CC, Japan',d:'Oct 23-26, 2025',kw:'zozo championship japan narashino accordia golf'},
+{n:'Sanderson Farms Championship',lg:'PGA',v:'Country Club of Jackson, MS',d:'Oct 2-5, 2025',kw:'sanderson farms championship jackson mississippi country club'},
+{n:'Bermuda Championship',lg:'PGA',v:'Port Royal GC, Bermuda',d:'Oct 30 – Nov 2, 2025',kw:'bermuda championship butterfield port royal golf course'},
+{n:'World Wide Technology Championship',lg:'PGA',v:'El Cardonal at Diamante, Cabo Mexico',d:'Nov 6-9, 2025',kw:'world wide technology championship mexico los cabos cabo diamante'},
+// ── LIV GOLF 2025 ──
+{n:'LIV Golf Mayakoba',lg:'LIV',v:'El Camaleón GC, Riviera Maya Mexico',d:'Feb 7-9, 2025',kw:'liv golf mayakoba mexico cancun riviera maya el camaleon xcaret'},
+{n:'LIV Golf Hong Kong',lg:'LIV',v:'Hong Kong GC, Fanling',d:'Mar 7-9, 2025',kw:'liv golf hong kong fanling country club china'},
+{n:'LIV Golf Las Vegas',lg:'LIV',v:'Las Vegas CC, Las Vegas NV',d:'Mar 21-23, 2025',kw:'liv golf las vegas country club nevada'},
+{n:'LIV Golf Miami',lg:'LIV',v:'Trump National Doral, Miami FL',d:'Apr 4-6, 2025',kw:'liv golf miami trump national doral florida blue monster'},
+{n:'LIV Golf Adelaide',lg:'LIV',v:'The Grange GC, Adelaide Australia',d:'Apr 18-20, 2025',kw:'liv golf adelaide australia grange golf club'},
+{n:'LIV Golf Singapore',lg:'LIV',v:'Sentosa GC, Singapore',d:'May 2-4, 2025',kw:'liv golf singapore sentosa serapong course'},
+{n:'LIV Golf Houston',lg:'LIV',v:'Golf Club of Houston, Houston TX',d:'May 30 – Jun 1, 2025',kw:'liv golf houston golf club texas katy'},
+{n:'LIV Golf Nashville',lg:'LIV',v:'The Grove Resort, College Grove TN',d:'Jun 13-15, 2025',kw:'liv golf nashville grove resort college grove tennessee'},
+{n:'LIV Golf Washington DC',lg:'LIV',v:'Trump National GC, Sterling VA',d:'Jun 20-22, 2025',kw:'liv golf dc washington trump national golf club sterling virginia'},
+{n:'LIV Golf Andalucia',lg:'LIV',v:'Real Club de Golf Sotogrande, Spain',d:'Jul 4-6, 2025',kw:'liv golf andalucia spain sotogrande valderrama'},
+{n:'LIV Golf Greenbrier',lg:'LIV',v:'The Greenbrier, White Sulphur Springs WV',d:'Jul 11-13, 2025',kw:'liv golf greenbrier white sulphur springs west virginia old white'},
+{n:'LIV Golf Chicago',lg:'LIV',v:'Bolingbrook GC, Bolingbrook IL',d:'Aug 1-3, 2025',kw:'liv golf chicago bolingbrook golf club illinois'},
+{n:'LIV Golf Memphis',lg:'LIV',v:'Memphis CC, Memphis TN',d:'Aug 15-17, 2025',kw:'liv golf memphis country club tennessee'},
+{n:'LIV Golf Tulsa',lg:'LIV',v:'Cedar Ridge CC, Broken Arrow OK',d:'Sep 5-7, 2025',kw:'liv golf tulsa cedar ridge country club broken arrow oklahoma'},
+{n:'LIV Golf Dallas',lg:'LIV',v:'Las Colinas CC, Irving TX',d:'Sep 19-21, 2025',kw:'liv golf dallas las colinas country club irving texas'},
+{n:'LIV Golf Jeddah',lg:'LIV',v:'Royal Greens GC, King Abdullah Economic City, Saudi Arabia',d:'Oct 3-5, 2025',kw:'liv golf jeddah saudi arabia royal greens king abdullah economic city'},
+{n:'LIV Golf Team Championship',lg:'LIV',v:'Trump National Doral, Miami FL',d:'Nov 7-9, 2025',kw:'liv golf team championship doral miami florida finale'},
+// ── LIV GOLF 2026 ──
+{n:'LIV Golf Mayakoba 2026',lg:'LIV',v:'El Camaleón GC, Mexico',d:'Feb 2026',kw:'liv golf mayakoba mexico 2026 el camaleon'},
+{n:'LIV Golf Hong Kong 2026',lg:'LIV',v:'Hong Kong GC, Fanling',d:'Mar 2026',kw:'liv golf hong kong 2026 fanling'},
+{n:'LIV Golf Las Vegas 2026',lg:'LIV',v:'Las Vegas CC, NV',d:'Mar 2026',kw:'liv golf las vegas 2026'},
+{n:'LIV Golf Miami 2026',lg:'LIV',v:'Trump National Doral, FL',d:'Apr 2026',kw:'liv golf miami doral 2026 trump'},
+{n:'LIV Golf Adelaide 2026',lg:'LIV',v:'The Grange GC, Australia',d:'Apr 2026',kw:'liv golf adelaide australia 2026'},
+{n:'LIV Golf Singapore 2026',lg:'LIV',v:'Sentosa GC, Singapore',d:'May 2026',kw:'liv golf singapore 2026 sentosa'},
+{n:'LIV Golf Andalucia 2026',lg:'LIV',v:'Sotogrande, Spain',d:'Jul 2026',kw:'liv golf spain sotogrande andalucia 2026'},
+{n:'LIV Golf Greenbrier 2026',lg:'LIV',v:'The Greenbrier, WV',d:'Jul 2026',kw:'liv golf greenbrier 2026'},
+];
+
+// Hardcoded Bay Hill R3 tee times (R3 suspended Sat March 7; resumed Sun March 8)
+// Source: Golf Channel / PGA Tour, March 7 2026
+const BAYHILL_R3_TEETIMES=[
+{t:'9:20 AM',hole:1,players:['Andrew Novak','Brian Harman']},
+{t:'9:30 AM',hole:1,players:['Luke Clanton','Maverick McNealy']},
+{t:'9:40 AM',hole:1,players:['Nico Echavarria','Rickie Fowler']},
+{t:'9:50 AM',hole:1,players:['Justin Thomas','Cameron Davis']},
+{t:'10:00 AM',hole:1,players:['Adam Hadwin','Min Woo Lee']},
+{t:'10:10 AM',hole:1,players:['Denny McCarthy','Sam Burns']},
+{t:'9:20 AM',hole:10,players:['Kurt Kitayama','Taylor Moore']},
+{t:'9:30 AM',hole:10,players:['Tom Kim','Hayden Buckley']},
+{t:'9:40 AM',hole:10,players:['Austin Smotherman','Keegan Bradley']},
+{t:'9:50 AM',hole:10,players:['Beau Hossler','Mark Hubbard']},
+{t:'10:00 AM',hole:10,players:['Brandon Wu','Callum Tarren']},
+{t:'10:10 AM',hole:10,players:['Davis Thompson','Aaron Rai']},
+{t:'12:25 PM',hole:1,players:['Scottie Scheffler','Harris English']},
+{t:'12:35 PM',hole:1,players:['Xander Schauffele','Russell Henley']},
+{t:'12:45 PM',hole:1,players:['Corey Conners','Max Greyserman']},
+{t:'12:55 PM',hole:1,players:['Rory McIlroy (WD)','Ryan Fox']},
+{t:'1:05 PM',hole:1,players:['Nick Taylor','Keith Mitchell']},
+{t:'1:15 PM',hole:1,players:['Sepp Straka','Sahith Theegala']},
+{t:'12:25 PM',hole:10,players:['Chris Kirk','Collin Morikawa']},
+{t:'12:35 PM',hole:10,players:['Cameron Young','Wyndham Clark']},
+{t:'12:45 PM',hole:10,players:['Ludvig Aberg','Viktor Hovland']},
+{t:'12:55 PM',hole:10,players:['Justin Rose','Matt Fitzpatrick']},
+{t:'1:05 PM',hole:10,players:['Jordan Spieth','Tom Hoge']},
+{t:'1:15 PM',hole:10,players:['Hideki Matsuyama','JT Poston']},
+{t:'1:30 PM',hole:1,players:['Billy Horschel','Emiliano Grillo']},
+{t:'1:40 PM',hole:1,players:['Si Woo Kim','Shane Lowry']},
+{t:'1:50 PM',hole:1,players:['Daniel Berger','Akshay Bhatia']},
+{t:'1:30 PM',hole:10,players:['Tommy Fleetwood','Patrick Cantlay']},
+{t:'1:40 PM',hole:10,players:['Tony Finau','Chris Gotterup']},
+{t:'1:50 PM',hole:10,players:['Taylor Pendrith','Sungjae Im']},
+];
+
+// ── FUZZY SEARCH ──────────────────────────────────────────────
+function tournScore(t,q){
+  const name=(t.n||'').toLowerCase();
+  const kw=(t.kw||'').toLowerCase();
+  const v=(t.v||'').toLowerCase();
+  if(name===q)return 100;
+  if(name.startsWith(q))return 92;
+  if(name.includes(q))return 82;
+  if(kw.includes(q))return 64;
+  if(v.includes(q))return 54;
+  const words=q.split(/\s+/).filter(w=>w.length>2);
+  if(!words.length)return 0;
+  const hay=name+' '+kw+' '+v;
+  const hits=words.filter(w=>hay.includes(w)).length;
+  return hits>0?30+(hits/words.length)*22:0;
+}
+
+function searchDB(q){
+  if(!q||q.length<2)return[];
+  const ql=q.toLowerCase().trim();
+  return TOURN_DB
+    .filter(t=>activeLeague==='pga'?t.lg==='PGA':activeLeague==='liv'?t.lg==='LIV':true)
+    .map(t=>({t, s:tournScore(t,ql)}))
+    .filter(x=>x.s>0)
+    .sort((a,b)=>b.s-a.s)
+    .slice(0,10)
+    .map(x=>x.t);  // return original TOURN_DB references — no copies, no spread
+}
+
+// ── LEAGUE TOGGLE ─────────────────────────────────────────────
+function setLeague(lg){
+  activeLeague=lg;
+  ['PGA','LIV','BOTH'].forEach(k=>{
+    document.getElementById('lg'+k).classList.toggle('on',
+      lg==='pga'?k==='PGA':lg==='liv'?k==='LIV':k==='BOTH');
+  });
+  const v=document.getElementById('tournInput').value;
+  if(v.length>=2)onTournSearch(v);
+}
+
+// ── TOURNAMENT SEARCH ─────────────────────────────────────────
+function onTournSearch(val){
+  document.getElementById('tournClear').style.display=val?'block':'none';
+  if(!val||val.length<2){document.getElementById('tournAc').style.display='none';return}
+  renderTournAc(searchDB(val),val.toLowerCase());
+}
+
+function onTournFocus(){
+  const v=document.getElementById('tournInput').value;
+  if(v.length>=2)renderTournAc(searchDB(v),v.toLowerCase());
+}
+
+function renderTournAc(results,q){
+  const ac=document.getElementById('tournAc');
+  if(!results.length){
+    ac.innerHTML='<div class="tourn-ac-item"><div class="tai-name" style="color:rgba(240,236,226,.4);font-size:13px">No matches — try city, course, or sponsor name</div></div>';
+    ac.style.display='block';return;
+  }
+  const firstWord=q.split(/\s+/)[0];
+  ac.innerHTML=results.map(t=>{
+    const lbadge=`<span class="tai-league tai-${t.lg.toLowerCase()}">${t.lg}</span>`;
+    const nm=t.n;
+    const idx=nm.toLowerCase().indexOf(firstWord);
+    const hiNm=idx>=0&&firstWord.length>1
+      ?nm.slice(0,idx)+'<strong>'+nm.slice(idx,idx+firstWord.length)+'</strong>'+nm.slice(idx+firstWord.length)
+      :nm;
+    const vStr=t.v?`<span style="color:rgba(201,152,42,.35);font-size:10px">${t.v}</span>`:'';
+    const safeName=t.n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<div class="tourn-ac-item" onmousedown="selectTournByName('${safeName}')">
+      <div class="tai-name">${hiNm}</div>
+      <div class="tai-meta">${lbadge}<span class="tai-date">${t.d||''}</span>${vStr}</div>
+    </div>`;
+  }).join('');
+  ac.style.display='block';
+}
+
+function hideTournAcDelay(){
+  tournAcHideTimer=setTimeout(()=>{document.getElementById('tournAc').style.display='none'},250);
+}
+
+function selectTournByName(name){
+  const t=TOURN_DB.find(x=>x.n===name);
+  if(!t){console.error('[PinSheet] selectTournByName: not found:',name);return;}
+  console.log('[PinSheet] selectTournByName:',name);
+  document.getElementById('tournAc').style.display='none';
+  document.getElementById('tournInput').value=t.n;
+  document.getElementById('tournClear').style.display='block';
+  document.getElementById('tournPillName').textContent=t.n+(t.d?' · '+t.d:'');
+  document.getElementById('tournPill').style.display='flex';
+  activeTournament=t;
+  clearSearch();
+  fetchTournData(t);
+}
+// Legacy idx shim (kept for safety)
+async function selectTourn(idx){
+  const t=TOURN_DB[idx];
+  if(!t){console.error('[PinSheet] selectTourn bad idx='+idx);return;}
+  selectTournByName(t.n);
+}
+
+function clearTournSearch(){
+  document.getElementById('tournInput').value='';
+  document.getElementById('tournClear').style.display='none';
+  document.getElementById('tournAc').style.display='none';
+  document.getElementById('tournPill').style.display='none';
+  document.getElementById('winnerBanner').style.display='none';
+  document.getElementById('liveStatusBar').style.display='none';
+  activeTournament=null; liveData=[]; liveTeeHTML='';
+  document.getElementById('liveTableWrap').innerHTML=
+    '<div class="live-empty"><p>Search any tournament above or load the current event.</p>'
+    +'<button class="live-load-btn" onclick="loadLive()">⛳ Load Current Event</button></div>';
+  document.getElementById('liveTeeWrap').innerHTML=
+    '<div class="live-empty"><p>Load a tournament to see tee times.</p>'
+    +'<button class="live-load-btn" onclick="loadLive()">⛳ Load Current Event</button></div>';
+}
+
+// ── FETCH FROM ESPN ───────────────────────────────────────────
+async function fetchTournData(t){
+  const btn=document.getElementById('liveRefreshBtn');
+  btn.classList.add('load');btn.textContent='…';
+  setLoadingState();
+  const league=t.lg==='LIV'?'liv':'pga';
+  try{
+    const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/golf/${league}/scoreboard`);
+    if(!r.ok)throw new Error('ESPN HTTP '+r.status);
+    const data=await r.json();
+    // Match by proper-noun scoring. Score must be >= 5 (at least one proper noun hit)
+    // to avoid false positives from generic words like 'open', 'classic', etc.
+    const GENERIC_GOLF=['invitational','championship','presented','classic','memorial',
+      'national','tournament','players','open','masters','challenge','pebble','beach',
+      'with','from','the','golf','tour','pga','liv','and','for','presented'];
+    // Use both the display name AND the kw alias field for matching
+    const nameWords=(t.n+' '+(t.kw||'')).toLowerCase().split(/[\s\-\&,]+/).filter(w=>w.length>3);
+    const properNouns=[...new Set(nameWords.filter(w=>!GENERIC_GOLF.includes(w)))];
+    let bestEv=null,bestScore=0;
+    (data.events||[]).forEach(e=>{
+      const en=((e.name||'')+' '+(e.shortName||'')).toLowerCase();
+      let score=0;
+      // Only count proper nouns — generic golf words score 0
+      properNouns.forEach(k=>{if(en.includes(k))score+=5;});
+      if(score>bestScore){bestScore=score;bestEv=e;}
+    });
+    // Must have at least one proper noun match (score >= 5) — never accept a generic-only match
+    const ev=bestScore>=5?bestEv:null;
+    if(!ev){
+      // CRITICAL: clear stale liveData so old leaderboard can't bleed through
+      liveData=[];
+      // Show what ESPN actually has right now so user can pivot
+      const available=(data.events||[]).map(e=>e.name||'').filter(Boolean);
+      const availHtml=available.length
+        ?'<div style="margin-top:14px;text-align:left;width:100%">'
+          +'<div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:rgba(201,152,42,.5);margin-bottom:8px;text-transform:uppercase">Currently in ESPN feed:</div>'
+          +available.map(n=>'<div onclick="ovrSearchAndLoad(\''+n.replace(/'/g,'&apos;')+'\')" '
+            +'style="font-family:var(--sans);font-size:13px;color:var(--au2);padding:9px 12px;'
+            +'background:rgba(201,152,42,.1);border-radius:8px;margin-bottom:6px;cursor:pointer">'+n+' ›</div>').join('')
+          +'</div>'
+        :'';
+      const errHTML='<div class="live-empty" style="padding:20px 16px;text-align:center;align-items:center">'
+        +'<div style="font-size:32px;margin-bottom:10px">📅</div>'
+        +'<div style="font-family:var(--serif);font-size:19px;font-weight:700;color:var(--au3);margin-bottom:6px">'+t.n+'</div>'
+        +'<div style="font-size:13px;color:var(--sh);margin-bottom:14px;line-height:1.55">Not in the ESPN live feed this week.<br>ESPN only carries the active current-week event.</div>'
+        +'<a href="https://www.pgatour.com/schedule" target="_blank" class="live-load-btn" '
+          +'style="text-decoration:none;display:inline-block;margin-bottom:10px">📅 PGA Tour Schedule →</a>'
+        +'<br><button class="live-load-btn" onclick="showHome()" '
+          +'style="background:rgba(201,152,42,.15);color:var(--au2)">📌 Search another tournament</button>'
+        +availHtml+'</div>';
+      document.getElementById('liveTableWrap').innerHTML=errHTML;
+      document.getElementById('liveStatusBar').style.display='none';
+      buildHardcodedTeeTimes(t);
+    } else {
+      processEvent(ev,league,t);
+    }
+  }catch(e){
+    liveData=[];
+    document.getElementById('liveTableWrap').innerHTML=
+      '<div class="t-err">⚠️ '+e.message+'<br><br>'
+      +'<button class="t-retry" onclick="liveRefresh()">Retry</button>'
+      +'&nbsp;&nbsp;<button class="t-retry" onclick="showHome()">📌 Home</button></div>';
+    buildHardcodedTeeTimes(t);
+  }
+  btn.classList.remove('load');btn.textContent='↻';
+}
+
+function setLoadingState(){
+  document.getElementById('liveTableWrap').innerHTML='<div class="t-spin" style="padding:40px;text-align:center;font-size:36px;color:var(--au)">⛳</div>';
+  // Don't spinner the tee wrap — it rarely has data and buildTeeTimes always writes it
+  // Leave current content until processEvent replaces it
+  document.getElementById('liveStatusBar').style.display='none';
+  document.getElementById('winnerBanner').style.display='none';
+}
+
+function processEvent(ev,league,meta){
+  // Always keep the pill + any title element in sync with what we actually loaded
+  if(meta&&meta.n){
+    document.getElementById('tournPillName').textContent=meta.n+(meta.d?' · '+meta.d:'');
+    document.getElementById('tournPill').style.display='flex';
+  }
+  // Log for debugging: confirm which ESPN event was matched vs requested
+  if(meta&&ev)console.log('[PinSheet] requested:',meta.n,'→ ESPN matched:',ev.name||ev.shortName||'?');
+  const comp=(ev.competitions||[])[0]||{};
+  const comps=[...(comp.competitors||[])].sort((a,b)=>{
+    const ap=parseInt(((a.status||{}).position||{}).id||9999);
+    const bp=parseInt(((b.status||{}).position||{}).id||9999);
+    return ap-bp;
+  });
+  // ── Detect active round ─────────────────────────────────────
+  // Count max linescores across all players to know which round we're in
+  const maxRound=comps.reduce((mx,p)=>Math.max(mx,(p.linescores||[]).length),0);
+  // activeRound: 1=R1 in progress, 2=R2, 3=R3, 4=R4. 0=pre-tournament.
+  const activeRound=maxRound>0?maxRound:0;
+
+  // ── Classify each player ─────────────────────────────────────
+  // Status signals from ESPN
+  function getPlayerStatus(p){
+    const sname=((p.status||{}).type||{}).name||'';
+    const posName=(((p.status||{}).position||{})).displayName||'';
+    const posId=(((p.status||{}).position||{})).id||'';
+    const wdSigs=['WD','DISQUALIFIED','DQ','DNF'];
+    const cutSigs=['CUT','MC','MDF','NMC','55','66','77']; // ESPN uses numeric ids for cut positions
+    if(wdSigs.some(s=>sname.includes(s)||posName.includes(s)))return'WD';
+    if(sname==='STATUS_WD'||posName==='WD')return'WD';
+    if(cutSigs.some(s=>posName===s))return'CUT';
+    if(sname==='STATUS_CUT'||sname==='STATUS_MDF')return'CUT';
+    // Check linescores: if required previous round is missing → cut/not started
+    // R4 day: need R3 linescore. R3 day: need R2. R2: need R1.
+    if(activeRound>=2){
+      const ls=p.linescores||[];
+      // Player needs (activeRound-1) completed rounds to be competing today
+      // A player who made cut but WD in current round still has previous rounds
+      if(ls.length<activeRound-1)return'CUT';
+    }
+    return'ACTIVE';
+  }
+
+  // Build liveData with classification
+  const activeComps=comps.filter(p=>getPlayerStatus(p)==='ACTIVE');
+  const wdComps=comps.filter(p=>getPlayerStatus(p)==='WD');
+  const cutComps=comps.filter(p=>getPlayerStatus(p)==='CUT');
+
+  // Assign positions only to active players
+  const scoreMap={};
+  activeComps.forEach((p,i)=>{const sc=p.score||'E';if(!scoreMap[sc])scoreMap[sc]=[];scoreMap[sc].push(i)});
+  liveData=activeComps.map((p,i)=>{
+    let pos=((p.status||{}).position||{}).displayName||'';
+    if(!pos||/^\d+$/.test(pos)){
+      const sc=p.score||'E';const tied=scoreMap[sc];
+      pos=tied.length>1?'T'+(tied[0]+1):String(i+1);
+    }
+    return{...p,_pos:pos,_cls:'ACTIVE'};
+  });
+  // Append WD players (no rank) — sorted by total score
+  wdComps.sort((a,b)=>(parseFloat(a.score)||0)-(parseFloat(b.score)||0));
+  wdComps.forEach(p=>liveData.push({...p,_pos:'WD',_cls:'WD'}));
+  // Append CUT players (no rank) — only show if R1/R2 complete
+  if(activeRound<=2){
+    cutComps.sort((a,b)=>(parseFloat(a.score)||0)-(parseFloat(b.score)||0));
+    cutComps.forEach(p=>liveData.push({...p,_pos:'MC',_cls:'CUT'}));
+  }
+  const st=((ev.status||{}).type||{});
+  const isF=st.name==='STATUS_FINAL'||st.completed===true||(st.description||'').toLowerCase().includes('final');
+  const isL=!isF&&(st.name==='STATUS_IN_PROGRESS'||(st.description||'').toLowerCase().includes('progress'));
+  const isSusp=!isF&&!isL&&((st.description||'').toLowerCase().includes('suspend')||(st.name||'').includes('SUSPEND'));
+  const badge=isF?'<span class="badge-done">✓ FINAL</span>'
+    :isSusp?'<span class="badge-live" style="background:#f59e0b">⏸ SUSPENDED</span>'
+    :isL?'<span class="badge-live">● LIVE</span>'
+    :'<span class="badge-pre">◷ UPCOMING</span>';
+  // Auto-refresh: start for live/suspended, stop for final/pre
+  if(isL||isSusp){ if(!arActive) startAutoRefresh(); }
+  else { stopAutoRefresh(); }
+  document.getElementById('liveBadge').innerHTML=badge;
+  const activeCnt=liveData.filter(p=>p._cls==='ACTIVE').length;
+  const wdCnt=liveData.filter(p=>p._cls==='WD').length;
+  const cutCnt=liveData.filter(p=>p._cls==='CUT').length;
+  const countParts=[activeCnt+' competing'];
+  if(wdCnt)countParts.push(wdCnt+' WD');
+  if(cutCnt)countParts.push(cutCnt+' MC');
+  document.getElementById('liveCount').textContent=countParts.join(' · ')+(st.shortDetail?' · '+st.shortDetail:'');
+  document.getElementById('liveStatusBar').style.display='flex';
+  if(isF&&liveData.length){
+    const w=liveData.find(p=>p._pos==='1')||liveData[0];
+    const wn=(w.athlete||{}).displayName||'—';
+    const sc=parseFloat(w.score||'');
+    const sf=isNaN(sc)?w.score||'—':sc<0?w.score:sc===0?'E':'+'+w.score;
+    document.getElementById('wbWinner').textContent=wn;
+    document.getElementById('wbScore').textContent=sf+' — Champion';
+    const venue=(comp.venue||{}).fullName||(meta&&meta.v)||'';
+    document.getElementById('wbMeta').textContent=[(meta&&meta.n)||ev.name||'',venue].filter(Boolean).join(' · ');
+    const nextYr=new Date().getFullYear()+1;
+    document.getElementById('wbNextDate').textContent='Next edition: '+nextYr+' — check pgatour.com for official dates';
+    document.getElementById('wbNext').style.display='inline-flex';
+    document.getElementById('winnerBanner').style.display='block';
+  }
+  buildTeeTimes(comp,ev,meta);
+  renderLiveTable();
+  // Safety net: if liveTeeWrap still shows a spinner after all of the above, replace it
+  const tw=document.getElementById('liveTeeWrap');
+  if(tw&&tw.querySelector('.t-spin')){
+    tw.innerHTML='<div class="tt-none">Tee time data not available from ESPN this week.'
+      +'<br><br>Use the official link above for pairings, or check back during active rounds.</div>';
+  }
+}
+
+// ── TEE TIMES ────────────────────────────────────────────────
+async function tryPGATourTeeTimeAPI(eventCode){
+  // PGA Tour unofficial stats API — event codes like '009' for API
+  // Format: https://statdata.pgatour.com/r/2026/009/teetimes.json (not always available)
+  const year=new Date().getFullYear();
+  const urls=[
+    `https://statdata.pgatour.com/r/${year}/${eventCode}/teetimes.json`,
+    `https://statdata.pgatour.com/r/${year}/0${eventCode}/teetimes.json`,
+  ];
+  for(const url of urls){
+    try{
+      const r=await fetch(url,{mode:'cors'});
+      if(r.ok){const d=await r.json();if(d&&(d.teetimes||d.groups||d.rounds))return d;}
+    }catch(e){}
+  }
+  return null;
+}
+
+function buildTeeTimes(comp,ev,meta){
+  // Wrap everything — always write to liveTeeWrap even if an error occurs
+  try{
+    const isBH=meta&&(meta.n||'').toLowerCase().includes('arnold');
+    const isBHUrl='https://www.pgatour.com/tournaments/2026/arnold-palmer-invitational-presented-by-mastercard/R2026009/tee-times';
+    const officialUrl=isBH?isBHUrl:'https://www.pgatour.com/tee-times';
+    let html=`<div class="tt-official-link">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--sh)">Official pairings</span>
+      <a href="${officialUrl}" target="_blank">pgatour.com →</a>
+    </div>`;
+    // Try ESPN tee time data first
+    const comps=(comp&&comp.competitors)||[];
+    const groups={}; let hasTimes=false;
+    comps.forEach(p=>{
+      const nm=(p.athlete||{}).displayName||'Unknown';
+      const score=p.score||'E';
+      const thru=((p.status||{}).displayValue)||'';
+      const raw=p.teeTime||p.startTime
+        ||(p.status&&(p.status.teeTime||p.status.startTime))
+        ||(p.athlete&&p.athlete.teeTime)||null;
+      const grp=p.groupId||(p.status&&p.status.groupId)||null;
+      const key=raw?'t_'+raw:grp?'g_'+grp:null;
+      if(key){
+        if(!groups[key])groups[key]={raw,grp,players:[]};
+        groups[key].players.push({nm,score,thru});
+        if(raw)hasTimes=true;
+      }
+    });
+    const keys=Object.keys(groups).sort();
+    if(hasTimes&&keys.length>0){
+      html+='<div class="tt-round-hdr">Tee Times (ESPN feed)</div>';
+      keys.forEach(k=>{
+        const g=groups[k];
+        let label=g.grp?'Group '+g.grp:'—';
+        if(g.raw){try{const d=new Date(g.raw);if(!isNaN(d))label=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York',hour12:true})+' ET'}catch(e2){label=g.raw}}
+        const rows=g.players.map(p=>{
+          const sc=parseFloat(p.score);const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+          return`<div class="tt-player-row"><span>${p.nm}</span><span class="tt-score-pill ${cls}">${p.score}</span></div>`;
+        }).join('');
+        html+=`<div class="tt-row"><div class="tt-time">${label}</div><div class="tt-players">${rows}</div></div>`;
+      });
+    } else if(isBH){
+      html+=buildBayHillTeeHTML();
+    } else {
+      html+='<div class="tt-none">Tee time data not available in ESPN feed.<br>Use the official link above for pairings.</div>';
+      if(liveData.length){
+        html+='<div class="tt-round-hdr">Players — Current Standings</div>';
+        liveData.forEach((p,i)=>{
+          const nm=(p.athlete||{}).displayName||'Unknown';
+          const pos=p._pos||String(i+1);
+          const sc=parseFloat(p.score||'');const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+          const thru=((p.status||{}).displayValue)||'—';
+          html+=`<div class="tt-row"><div class="tt-time" style="font-size:11px;min-width:44px">${pos}</div>`
+            +`<div class="tt-players"><div class="tt-player-row">`
+            +`<span>${nm}</span>`
+            +`<span class="tt-score-pill ${cls}">${p.score||'E'}</span>`
+            +`<span style="font-family:var(--mono);font-size:10px;color:var(--sh)"> thru ${thru}</span>`
+            +'</div></div></div>';
+        });
+      }
+    }
+    liveTeeHTML=html;
+    document.getElementById('liveTeeWrap').innerHTML=html;
+  }catch(err){
+    // Safety net — always clear the spinner
+    console.error('[PinSheet] buildTeeTimes error:',err);
+    const fb='<div class="tt-none">Could not load tee times. Use the official pgatour.com link above.</div>';
+    liveTeeHTML=fb;
+    document.getElementById('liveTeeWrap').innerHTML=fb;
+  }
+}
+
+function buildHardcodedTeeTimes(meta){
+  try{
+    const isBH=meta&&(meta.n||'').toLowerCase().includes('arnold');
+    const officialUrl=isBH
+      ?'https://www.pgatour.com/tournaments/2026/arnold-palmer-invitational-presented-by-mastercard/R2026009/tee-times'
+      :'https://www.pgatour.com/tee-times';
+    let html=`<div class="tt-official-link">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--sh)">Official pairings</span>
+      <a href="${officialUrl}" target="_blank">pgatour.com →</a>
+    </div>`;
+    if(isBH){
+      html+=buildBayHillTeeHTML();
+    } else {
+      const nm=meta&&meta.n?meta.n:'This event';
+      html+='<div class="tt-none">'+nm+' is not in the ESPN live feed.<br><br>Tee times are only available from ESPN during active tournament rounds.<br><br>Use the official link above for the latest pairings.</div>';
+    }
+    liveTeeHTML=html;
+    document.getElementById('liveTeeWrap').innerHTML=html;
+  }catch(err){
+    console.error('[PinSheet] buildHardcodedTeeTimes error:',err);
+    document.getElementById('liveTeeWrap').innerHTML='<div class="tt-none">Tee times unavailable. Check official pgatour.com for pairings.</div>';
+  }
+}
+
+function buildBayHillTeeHTML(){
+  // Group by tee (1 vs 10) then sort by time
+  const hole1=BAYHILL_R3_TEETIMES.filter(g=>g.hole===1).sort((a,b)=>a.t.localeCompare(b.t));
+  const hole10=BAYHILL_R3_TEETIMES.filter(g=>g.hole===10).sort((a,b)=>a.t.localeCompare(b.t));
+  let html='<div class="tt-hardcoded-note">📋 R3 pairings (Sat Mar 7, resumed Sun Mar 8) — Only 4 players needed to finish holes 17-18 to complete R3. R4 tee off ~9:20 AM ET. Check official link above for live R4 pairings once posted.</div>';
+  html+='<div class="tt-round-hdr">Round 3 — Hole 1 Tee</div>';
+  hole1.forEach(g=>{
+    const rows=g.players.map(nm=>`<div class="tt-player-row"><span>${nm}</span></div>`).join('');
+    html+=`<div class="tt-row"><div class="tt-time">${g.t} ET<span class="tt-hole-num">H1</span></div><div class="tt-players">${rows}</div></div>`;
+  });
+  html+='<div class="tt-round-hdr">Round 3 — Hole 10 Tee</div>';
+  hole10.forEach(g=>{
+    const rows=g.players.map(nm=>`<div class="tt-player-row"><span>${nm}</span></div>`).join('');
+    html+=`<div class="tt-row"><div class="tt-time">${g.t} ET<span class="tt-hole-num">H10</span></div><div class="tt-players">${rows}</div></div>`;
+  });
+  return html;
+}
+
+// ── SUB-TAB TOGGLE ────────────────────────────────────────────
+function showLiveTab(tab){
+  liveSubTab=tab;
+  document.getElementById('lstabBoard').classList.toggle('on',tab==='board');
+  document.getElementById('lstabTimes').classList.toggle('on',tab==='times');
+  document.getElementById('liveBoard').style.display=tab==='board'?'flex':'none';
+  document.getElementById('liveTimes').style.display=tab==='times'?'flex':'none';
+}
+
+// ── LOAD CURRENT PGA EVENT ────────────────────────────────────
+async function loadLive(){
+  const btn=document.getElementById('liveRefreshBtn');
+  btn.classList.add('load');btn.textContent='…';
+  setLoadingState();
+  try{
+    // Fetch whatever ESPN has live RIGHT NOW — don't hardcode Arnold Palmer
+    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard');
+    if(!r.ok)throw new Error('ESPN HTTP '+r.status);
+    const data=await r.json();
+    const events=data.events||[];
+    if(!events.length)throw new Error('No events in ESPN feed');
+    // Prefer in-progress/suspended event; fall back to first
+    const live=events.find(e=>{const s=((e.status||{}).type||{}).name||'';return s.includes('PROGRESS')||s.includes('SUSPEND')});
+    const ev=live||events[0];
+    // Find matching TOURN_DB entry or create ad-hoc
+    const kws=(ev.name||'').toLowerCase().split(/[\s\-\&]+/).filter(w=>w.length>3);
+    let meta=TOURN_DB.find(t=>{const tn=t.n.toLowerCase();return kws.some(k=>tn.includes(k))});
+    if(!meta)meta={n:ev.name||'Current Event',lg:'PGA',v:((ev.competitions||[])[0]&&(ev.competitions[0].venue||{}).fullName)||'',d:''};
+    activeTournament=meta;
+    document.getElementById('tournInput').value=meta.n;
+    document.getElementById('tournClear').style.display='block';
+    document.getElementById('tournPillName').textContent=meta.n;
+    document.getElementById('tournPill').style.display='flex';
+    // liveTitle removed — title is shown in tournPillName
+    clearSearch();
+    processEvent(ev,'pga',meta);
+  }catch(e){
+    liveData=[];
+    document.getElementById('liveTableWrap').innerHTML=
+      '<div class="t-err">⚠️ '+e.message+'<br><br><button class="t-retry" onclick="loadLive()">Retry</button></div>';
+  }
+  btn.classList.remove('load');btn.textContent='↻';
+}
+
+// ── AUTO-REFRESH ENGINE ──────────────────────────────────────
+const AR_INTERVAL = 90;  // seconds between auto-refreshes
+let arTimer = null;       // setInterval handle
+let arCountdown = 0;      // seconds remaining
+let arActive = false;     // is auto-refresh running?
+let arEventLive = false;  // is the current event in-progress?
+
+function startAutoRefresh(){
+  stopAutoRefresh();
+  arCountdown = AR_INTERVAL;
+  arActive = true;
+  arEventLive = true;
+  updateARui();
+  arTimer = setInterval(arTick, 1000);
+}
+
+function stopAutoRefresh(){
+  if(arTimer){clearInterval(arTimer);arTimer=null;}
+  arActive = false;
+  arEventLive = false;
+  updateARui();
+}
+
+function pauseAutoRefresh(){
+  // Keep state but stop ticking (e.g. tab hidden or user on different tab)
+  if(arTimer){clearInterval(arTimer);arTimer=null;}
+}
+
+function resumeAutoRefresh(){
+  if(arEventLive && !arTimer){
+    arTimer = setInterval(arTick, 1000);
+    updateARui();
+  }
+}
+
+function arTick(){
+  arCountdown--;
+  updateARRing();
+  if(arCountdown <= 0){
+    arCountdown = AR_INTERVAL;
+    // Only auto-fetch if Live tab is visible
+    if(curV === 'Live'){
+      silentRefresh();
+    } else {
+      // Tab not visible — still count down but don't fetch
+      arCountdown = AR_INTERVAL;
+    }
+  }
+}
+
+// silentRefresh: fetch + update without showing loading spinner
+async function silentRefresh(){
+  if(!activeTournament) return;
+  try{
+    const league = activeTournament.lg==='LIV'?'liv':'pga';
+    const r = await fetch('https://site.api.espn.com/apis/site/v2/sports/golf/'+league+'/scoreboard');
+    if(!r.ok) return;
+    const data = await r.json();
+    const GENERIC=['invitational','championship','presented','classic','memorial',
+      'national','tournament','players','open','masters','challenge','pebble','beach',
+      'with','from','the','golf','tour','pga','liv','and','for'];
+    const nameWords=(activeTournament.n+' '+(activeTournament.kw||'')).toLowerCase()
+      .split(/[\s\-\&,]+/).filter(w=>w.length>3);
+    const proper=[...new Set(nameWords.filter(w=>!GENERIC.includes(w)))];
+    let bestEv=null, bestSc=0;
+    (data.events||[]).forEach(e=>{
+      const en=((e.name||'')+' '+(e.shortName||'')).toLowerCase();
+      let sc=0; proper.forEach(k=>{if(en.includes(k))sc+=5;});
+      if(sc>bestSc){bestSc=sc;bestEv=e;}
+    });
+    if(!bestEv || bestSc<5) return;
+    // Update without resetting scroll position
+    processEvent(bestEv, league, activeTournament);
+    // Update last-refreshed time
+    const now = new Date();
+    const ts = now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+    document.getElementById('liveCount').textContent =
+      liveData.length+' players · Updated '+ts;
+    // Check if event is still live — if final, stop auto-refresh
+    const st=((bestEv.status||{}).type||{});
+    const isFinal=st.name==='STATUS_FINAL'||st.completed===true;
+    if(isFinal){
+      stopAutoRefresh();
+    }
+  } catch(e){
+    // Silent fail — don't disrupt the user
+    console.warn('[PinSheet] silentRefresh error:',e.message);
+  }
+}
+
+function manualRefresh(){
+  arCountdown = AR_INTERVAL; // reset countdown
+  updateARRing();
+  if(activeTournament) fetchTournData(activeTournament);
+  else loadLive();
+}
+
+function updateARui(){
+  const chip = document.getElementById('autoRfshChip');
+  const dot  = document.getElementById('arcDot');
+  const lbl  = document.getElementById('arcLabel');
+  const ring = document.getElementById('rfshRing');
+  if(!chip) return;
+  if(arEventLive){
+    chip.style.display='flex';
+    ring.style.display='block';
+    dot.className='arc-dot live';
+    lbl.textContent='auto';
+  } else {
+    chip.style.display='none';
+    ring.style.display='none';
+  }
+  updateARRing();
+}
+
+function updateARRing(){
+  const fill = document.getElementById('rfshRingFill');
+  if(!fill) return;
+  const pct = arCountdown / AR_INTERVAL;         // 1.0 → 0.0
+  const circ = 56.5;
+  fill.style.strokeDashoffset = String(circ - pct*circ);
+  fill.className = 'rfsh-ring-fill' + (arActive?'':' paused');
+}
+
+// Pause auto-refresh when page/tab is hidden, resume when visible
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) pauseAutoRefresh();
+  else resumeAutoRefresh();
+});
+
+function liveRefresh(){
+  manualRefresh();
+}
+
+// ── HOLE CONTEXT (Bay Hill only) ──────────────────────────────
+function getHoleInfo(thruRaw){
+  const t=(thruRaw||'').toString().toUpperCase().trim();
+  if(!t||t==='—'||t==='-')return null;
+  if(t==='F'||t==='FINAL')return{done:true};
+  const n=parseInt(t);if(isNaN(n)||n<1||n>18)return null;
+  const h=HOLES[n-1];
+  return{h:n,p:h.p,y:h.ty.bk,hcp:h.hcp,done:false};
+}
+function isBayHill(){
+  return activeTournament&&(activeTournament.n||'').toLowerCase().includes('arnold');
+}
+
+// ── RENDER LEADERBOARD ────────────────────────────────────────
+function renderLiveTable(){
+  const q=liveFilter.toLowerCase().trim();
+  // Split into groups — when searching, search across all groups
+  const allRows=q?liveData.filter(p=>((p.athlete||{}).displayName||'').toLowerCase().includes(q)):null;
+  const activeRows=allRows?allRows.filter(p=>p._cls==='ACTIVE'):liveData.filter(p=>p._cls==='ACTIVE');
+  const wdRows=allRows?allRows.filter(p=>p._cls==='WD'):liveData.filter(p=>p._cls==='WD');
+  const cutRows=allRows?allRows.filter(p=>p._cls==='CUT'):liveData.filter(p=>p._cls==='CUT');
+  const totalShown=activeRows.length+wdRows.length+cutRows.length;
+
+  if(q&&totalShown===0){
+    document.getElementById('liveTableWrap').innerHTML=
+      '<div style="padding:28px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--sh)">No players match "'+liveFilter+'"</div>';
+    return;
+  }
+  if(!q&&!activeRows.length&&!wdRows.length&&!cutRows.length){
+    document.getElementById('liveTableWrap').innerHTML=
+      '<div style="padding:28px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--sh)">No player data</div>';
+    return;
+  }
+
+  const bay=isBayHill();
+
+  function buildPlayerRow(p,overridePos){
+    const nm=(p.athlete||{}).displayName||'Unknown';
+    const pos=overridePos!==undefined?overridePos:(p._pos||'—');
+    const tot=p.score||'E';
+    const thru=((p.status||{}).displayValue)||'—';
+    const rs=(p.linescores||[]).concat([{},{},{},{}]).slice(0,4)
+      .map(x=>x&&x.value!==undefined?(x.value===0?'E':x.value>0?'+'+x.value:x.value):'—');
+    const sc=parseFloat(tot);
+    const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+    const isHi=q&&nm.toLowerCase().includes(q);
+    const isLead=pos==='1'&&p._cls==='ACTIVE';
+    const isWD=p._cls==='WD';
+    const isCut=p._cls==='CUT';
+    let holeTd='';
+    if(bay){
+      const hi=getHoleInfo(thru);
+      if(!hi||isWD||isCut)holeTd='<td>—</td><td>—</td><td>—</td><td>—</td>';
+      else if(hi.done)holeTd='<td><span class="hole-pill done">F</span></td><td>—</td><td>—</td><td>—</td>';
+      else{
+        const pc=hi.p===3?'par3':hi.p===4?'par4':'par5';
+        holeTd=`<td><span class="hole-pill ${pc}">${hi.h}</span></td>`
+          +`<td style="font-family:var(--mono);font-size:12px">${hi.p}</td>`
+          +`<td style="font-family:var(--mono);font-size:12px">${hi.y}</td>`
+          +`<td style="font-family:var(--mono);font-size:11px;color:var(--sh)">#${hi.hcp}</td>`;
+      }
+    }
+    const rowStyle=isWD?'opacity:.55':'';
+    const posStyle=isLead
+      ?'font-size:11px;font-weight:700;color:var(--au2)'
+      :(isWD||isCut)?'font-size:11px;color:rgba(139,35,21,.7)':'font-size:11px;color:var(--sh)';
+    return`<tr class="${isHi?'live-hi':''}" style="${rowStyle}">`
+      +`<td style="${posStyle}">${pos}</td>`
+      +`<td>${nm}${isLead&&!q?' 👑':''}</td>`
+      +`<td class="${cls}">${tot}</td>`
+      +holeTd
+      +`<td>${rs[0]}</td><td>${rs[1]}</td><td>${rs[2]}</td><td>${rs[3]}</td>`
+      +`<td style="color:var(--sh);font-size:11px">${thru}</td></tr>`;
+  }
+
+  function sectionHeader(label,count){
+    const colspan=bay?12:9;
+    return`<tr><td colspan="${colspan}" style="background:rgba(0,0,0,.06);padding:6px 10px;`
+      +`font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;`
+      +`color:var(--sh);border-top:2px solid rgba(0,0,0,.08)">${label} (${count})</td></tr>`;
+  }
+
+  let html='<table class="lb-tbl"><thead><tr><th>POS</th><th>PLAYER</th><th>TOT</th>';
+  if(bay)html+='<th>HOLE</th><th>PAR</th><th>YDS</th><th>HCP</th>';
+  html+='<th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>THRU</th></tr></thead><tbody>';
+
+  // ① Active / competing players
+  activeRows.forEach(p=>{ html+=buildPlayerRow(p); });
+
+  // ② Withdrawn players — dimmed, no rank, at bottom
+  if(wdRows.length){
+    html+=sectionHeader('Withdrawn',wdRows.length);
+    wdRows.forEach(p=>{ html+=buildPlayerRow(p,'WD'); });
+  }
+
+  // ③ Missed cut — only shown during R1/R2 rounds
+  if(cutRows.length){
+    html+=sectionHeader('Missed Cut',cutRows.length);
+    cutRows.forEach(p=>{ html+=buildPlayerRow(p,'MC'); });
+  }
+
+  html+='</tbody></table>';
+  document.getElementById('liveTableWrap').innerHTML=html;
+  if(q){const hi=document.querySelector('#liveTableWrap tr.live-hi');if(hi)setTimeout(()=>hi.scrollIntoView({block:'center',behavior:'smooth'}),80)}
+}
+
+// ── PLAYER AUTOCOMPLETE ───────────────────────────────────────
+function onLiveSearch(val){
+  liveFilter=val;
+  document.getElementById('liveClearBtn').style.display=val?'block':'none';
+  buildAcList(val);
+  if(liveData.length)renderLiveTable();
+}
+function buildAcList(val){
+  const ac=document.getElementById('liveAcList');
+  if(!val||!liveData.length){ac.style.display='none';return}
+  const q=val.toLowerCase();
+  const hits=liveData.filter(p=>((p.athlete||{}).displayName||'').toLowerCase().includes(q)).slice(0,8);
+  if(!hits.length){ac.style.display='none';return}
+  ac.innerHTML=hits.map(p=>{
+    const nm=(p.athlete||{}).displayName||'';
+    const pos=p._pos||'';const tot=p.score||'E';
+    const sc=parseFloat(tot);const cls=isNaN(sc)?'t-e':sc<0?'t-u':sc>0?'t-o':'t-e';
+    const idx=nm.toLowerCase().indexOf(q);
+    const hi=idx>=0?nm.slice(0,idx)+'<strong>'+nm.slice(idx,idx+val.length)+'</strong>'+nm.slice(idx+val.length):nm;
+    const safe=nm.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<div class="live-ac-item" onmousedown="selectAc('${safe}')">
+      <span>${hi}</span>
+      <span><span class="live-ac-pos">${pos}&nbsp;</span><span class="live-ac-score ${cls}">${tot}</span></span>
+    </div>`;
+  }).join('');
+  ac.style.display='block';
+}
+function selectAc(nm){
+  document.getElementById('liveSearchInput').value=nm;
+  liveFilter=nm;
+  document.getElementById('liveClearBtn').style.display='block';
+  document.getElementById('liveAcList').style.display='none';
+  renderLiveTable();
+}
+function showAc(){if(liveFilter&&liveData.length)buildAcList(liveFilter)}
+function hideAcDelay(){acHideTimer=setTimeout(()=>{document.getElementById('liveAcList').style.display='none'},200)}
+function clearSearch(){
+  liveFilter='';
+  const inp=document.getElementById('liveSearchInput');if(inp)inp.value='';
+  const clr=document.getElementById('liveClearBtn');if(clr)clr.style.display='none';
+  const acl=document.getElementById('liveAcList');if(acl)acl.style.display='none';
+  if(liveData.length)renderLiveTable();
+}
+
+/* ── HELPERS ─────────────────────────────────────────────────── */
+// Called from "currently in feed" click buttons on the error screen
+function ovrSearchAndLoad(evName){
+  const kws=evName.toLowerCase().split(/[\s\-\&]+/).filter(w=>w.length>3);
+  let meta=TOURN_DB.find(t=>{
+    const tn=t.n.toLowerCase();
+    return kws.some(k=>tn.includes(k));
+  });
+  if(!meta)meta={n:evName,lg:'PGA',v:'',d:''};
+  // Update the Live tab UI
+  document.getElementById('tournInput').value=meta.n;
+  document.getElementById('tournClear').style.display='block';
+  document.getElementById('tournPillName').textContent=meta.n;
+  document.getElementById('tournPill').style.display='flex';
+  activeTournament=meta;
+  clearSearch();
+  fetchTournData(meta);
+}
+
+// Pending tournament set by landing page before GPS choice
+let _pendingEspnEv=null,_pendingLeague='pga',_pendingMeta=null;
+
+// Called when user taps a tournament card or search result on landing page
+function ovrSetSelectedTournament(meta){
+  const label=document.getElementById('ovrGpsLabel');
+  const btn=document.getElementById('ovrGpsBtn');
+  const skip=document.getElementById('ovrGpsSkip');
+  if(!meta){
+    // Reset to Bay Hill defaults
+    if(label)label.textContent='Select a tournament above, or use Bay Hill GPS';
+    if(btn)btn.textContent='📍 Enable GPS';
+    if(skip)skip.textContent='Enter app without GPS';
+    return;
+  }
+  const nm=meta.n||'Selected Tournament';
+  if(label)label.textContent='Selected: '+nm;
+  if(btn)btn.textContent='📍 Enable GPS & Open Tournament';
+  if(skip)skip.textContent='Open without GPS →';
+  // Scroll to GPS strip so user sees it
+  const strip=document.getElementById('ovrGpsStrip');
+  if(strip)strip.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// Override startGPS to navigate to Live tab after GPS enabled
+const _origStartGPS=()=>{
+  dot('seek');lbl('…');
+  if(!navigator.geolocation){dot('fail');lbl('NONE');return;}
+  navigator.geolocation.watchPosition(gok,gerr,{enableHighAccuracy:true,maximumAge:3000,timeout:18000});
+};
+function startGPS(){
+  document.getElementById('ovr').classList.add('gone');
+  _origStartGPS();
+  _navigateAfterOverlay();
+}
+function skipGPS(){
+  document.getElementById('ovr').classList.add('gone');
+  _navigateAfterOverlay();
+}
+function _navigateAfterOverlay(){
+  render();
+  if(_pendingMeta){
+    // Navigate to Live tab with pre-selected tournament
+    sw('Live');
+    document.getElementById('tournInput').value=_pendingMeta.n;
+    document.getElementById('tournClear').style.display='block';
+    document.getElementById('tournPillName').textContent=_pendingMeta.n+(_pendingMeta.d?' · '+_pendingMeta.d:'');
+    document.getElementById('tournPill').style.display='flex';
+    activeTournament=_pendingMeta;
+    clearSearch();
+    // If data was already pre-fetched via processEvent, great. If not, fetch now.
+    if(_pendingEspnEv){
+      processEvent(_pendingEspnEv,_pendingLeague,_pendingMeta);
+    }
+    _pendingEspnEv=null; _pendingLeague='pga'; _pendingMeta=null;
+  }
+}
+
+/* ── PINSHEET LANDING ─────────────────────────────────────────
+   Landing page: auto-fetch current/upcoming ESPN events,
+   tournament search (shared with Live tab DB),
+   selecting any event dismisses overlay + loads Live tab.
+──────────────────────────────────────────────────────────── */
+let ovrLeague='pga';
+let ovrAcHideTimer=null;
+let ovrEventsLoaded=false;
+
+// Reuse TOURN_DB from Live tab JS
+
+function ovrSetLeague(lg){
+  ovrLeague=lg;
+  ['PGA','LIV','BOTH'].forEach(k=>{
+    document.getElementById('ovrLg'+k).classList.toggle('on',
+      lg==='pga'?k==='PGA':lg==='liv'?k==='LIV':k==='BOTH');
+  });
+  // Also keep Live tab league in sync
+  activeLeague=lg;
+  const v=document.getElementById('ovrSearchInput').value;
+  if(v.length>=2)ovrOnSearch(v);
+}
+
+function ovrOnSearch(val){
+  document.getElementById('ovrSearchClear').style.display=val?'block':'none';
+  if(!val||val.length<2){document.getElementById('ovrAc').style.display='none';return}
+  // Reuse searchDB from Live tab
+  activeLeague=ovrLeague;
+  const results=searchDB(val);
+  ovrRenderAc(results,val.toLowerCase());
+}
+
+function ovrRenderAc(results,q){
+  const ac=document.getElementById('ovrAc');
+  if(!results.length){
+    ac.innerHTML='<div class="ovr-ac-item"><div class="ovr-ai-name" style="color:rgba(240,236,226,.35)">No matches — try city, sponsor, or course name</div></div>';
+    ac.style.display='block';return;
+  }
+  const fw=q.split(/\s+/)[0];
+  ac.innerHTML=results.map((t,i)=>{
+    const lbadge=`<span class="tai-league tai-${t.lg.toLowerCase()}">${t.lg}</span>`;
+    const nm=t.n;
+    const idx=nm.toLowerCase().indexOf(fw);
+    const hi=idx>=0&&fw.length>1
+      ?nm.slice(0,idx)+'<strong>'+nm.slice(idx,idx+fw.length)+'</strong>'+nm.slice(idx+fw.length)
+      :nm;
+    const ovrsafe=t.n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<div class="ovr-ac-item" onmousedown="ovrSelectTournByName('${ovrsafe}')">
+      <div class="ovr-ai-name">${hi}</div>
+      <div class="ovr-ai-meta">${lbadge}<span class="tai-date">${t.d||''}</span><span style="color:rgba(201,152,42,.32);font-size:10px">${t.v||''}</span></div>
+    </div>`;
+  }).join('');
+  ac.style.display='block';
+}
+
+function ovrShowAc(){
+  const v=document.getElementById('ovrSearchInput').value;
+  if(v.length>=2)ovrOnSearch(v);
+}
+function ovrHideAcDelay(){
+  ovrAcHideTimer=setTimeout(()=>{document.getElementById('ovrAc').style.display='none'},250);
+}
+function ovrClearSearch(){
+  document.getElementById('ovrSearchInput').value='';
+  document.getElementById('ovrSearchClear').style.display='none';
+  document.getElementById('ovrAc').style.display='none';
+}
+
+function ovrSelectTournByName(name){
+  const t=TOURN_DB.find(x=>x.n===name);
+  if(!t){console.error('[PinSheet] ovrSelectTournByName: not found:',name);return;}
+  console.log('[PinSheet] ovrSelectTournByName:',name);
+  document.getElementById('ovr').classList.add('gone');
+  render();
+  sw('Live');
+  document.getElementById('tournInput').value=t.n;
+  document.getElementById('tournClear').style.display='block';
+  document.getElementById('tournPillName').textContent=t.n+(t.d?' · '+t.d:'');
+  document.getElementById('tournPill').style.display='flex';
+  activeTournament=t;
+  _pendingEspnEv=null; _pendingLeague=(t.lg==='LIV'?'liv':'pga'); _pendingMeta=t;
+  // Update GPS strip to reflect selected tournament — user still chooses GPS or skip
+  ovrSetSelectedTournament(t);
+  // Pre-fetch in background so Live tab is ready immediately after
+  fetchTournData(t);
+}
+// Legacy shim
+async function ovrSelectTourn(idx){
+  const t=TOURN_DB[idx];
+  if(!t){console.error('[PinSheet] ovrSelectTourn bad idx='+idx);return;}
+  ovrSelectTournByName(t.n);
+}
+
+// ── AUTO-FETCH current/upcoming events from ESPN ──────────────
+async function loadOvrEvents(){
+  if(ovrEventsLoaded)return;
+  const evBox=document.getElementById('ovrEvents');
+  try{
+    // Fetch PGA + LIV boards in parallel
+    const [pgaResp,livResp]=await Promise.allSettled([
+      fetch('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard'),
+      fetch('https://site.api.espn.com/apis/site/v2/sports/golf/liv/scoreboard'),
+    ]);
+    const events=[];
+    const processResp=async(resp,league)=>{
+      if(resp.status!=='fulfilled'||!resp.value.ok)return;
+      const data=await resp.value.json();
+      (data.events||[]).forEach(ev=>{
+        const st=((ev.status||{}).type||{});
+        const isF=st.completed||st.name==='STATUS_FINAL';
+        const isL=st.name==='STATUS_IN_PROGRESS';
+        const isSusp=(st.description||'').toLowerCase().includes('suspend');
+        const comp=(ev.competitions||[])[0]||{};
+        // Leader
+        const comps=[...(comp.competitors||[])].sort((a,b)=>{
+          return parseInt(((a.status||{}).position||{}).id||9999)-parseInt(((b.status||{}).position||{}).id||9999);
+        });
+        const leader=comps[0]&&(comps[0].athlete||{}).displayName
+          ?comps[0].athlete.displayName+(comps[0].score?' '+comps[0].score:''):'';
+        const venue=(comp.venue||{}).fullName||'';
+        events.push({
+          id:ev.id,name:ev.name||ev.shortName||'Event',
+          venue,league,isF,isL,isSusp,leader,
+          date:ev.date||'',
+          _raw:ev,
+        });
+      });
+    };
+    await processResp(pgaResp,'PGA');
+    await processResp(livResp,'LIV');
+    if(!events.length){
+      evBox.innerHTML='<div class="ovr-loading">No live events found. Search above for any tournament.</div>';
+      return;
+    }
+    // Sort: live first, then upcoming, then completed
+    events.sort((a,b)=>{
+      const rank=e=>e.isL?0:e.isSusp?1:!e.isF?2:3;
+      return rank(a)-rank(b);
+    });
+    evBox.innerHTML=events.slice(0,6).map((ev,i)=>{
+      const lbadge=`<span class="tai-league tai-${ev.league.toLowerCase()}" style="font-size:9px">${ev.league}</span>`;
+      let statusStr='', statusCls='up';
+      if(ev.isL){statusStr='● LIVE';statusCls='live'}
+      else if(ev.isSusp){statusStr='⏸ SUSP';statusCls='live'}
+      else if(ev.isF){statusStr='✓ Final';statusCls='done'}
+      else{statusStr='Coming up';statusCls='up'}
+      const leaderStr=ev.leader?`<div class="oec-leader">🏆 ${ev.leader}</div>`:'';
+      const isLiveCard=ev.isL||ev.isSusp;
+      const safeEvName=ev.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return`<div class="ovr-ev-card ${isLiveCard?'live-card':''}"
+        onmousedown="ovrSelectEspnEvent('${safeEvName}')">
+        <div class="oec-left">
+          <div class="oec-name">${ev.name}</div>
+          <div class="oec-venue">${lbadge} ${ev.venue||''}</div>
+        </div>
+        <div class="oec-right">
+          <div class="oec-status ${statusCls}">${statusStr}</div>
+          ${leaderStr}
+        </div>
+        <div class="oec-arr">›</div>
+      </div>`;
+    }).join('');
+    // Store events for click handler
+    window._ovrEvents=events;
+    ovrEventsLoaded=true;
+  }catch(e){
+    evBox.innerHTML='<div class="ovr-loading">Could not load live events — search above.</div>';
+  }
+}
+
+function ovrSelectEspnEvent(espnName){
+  // Find the ESPN event object by name
+  const ev=window._ovrEvents&&window._ovrEvents.find(e=>e.name===espnName);
+  if(!ev){console.error('[PinSheet] ovrSelectEspnEvent: not found:',espnName);return;}
+
+  // Match TOURN_DB using proper-noun scoring (same logic as fetchTournData)
+  const GENERIC=['invitational','championship','presented','classic','memorial',
+    'national','tournament','players','open','masters','challenge','pebble','beach',
+    'with','from','the','golf','tour','pga','liv','and','for'];
+  const espnWords=espnName.toLowerCase().split(/[\s\-\&]+/).filter(w=>w.length>3);
+  const espnProper=espnWords.filter(w=>!GENERIC.includes(w));
+
+  let bestMeta=null,bestScore=0;
+  TOURN_DB.forEach(t=>{
+    const tn=(t.n+' '+(t.kw||'')).toLowerCase();
+    let sc=0;
+    espnProper.forEach(k=>{if(tn.includes(k))sc+=5;});
+    if(sc>bestScore){bestScore=sc;bestMeta=t;}
+  });
+  // Must score >= 5 (one proper noun hit) — otherwise use ESPN name directly
+  const meta=bestScore>=5
+    ?bestMeta
+    :{n:ev.name,lg:ev.league,v:ev.venue,d:''};
+
+  console.log('[PinSheet] ovrSelectEspnEvent: ESPN='+espnName+' → DB='+meta.n+' (score='+bestScore+')');
+
+  activeTournament=meta;
+  // Update GPS strip to reflect the selected tournament, then let user choose GPS/skip
+  ovrSetSelectedTournament(meta);
+  // Pre-load data in background so Live tab is ready
+  const league=(ev.league||'PGA').toLowerCase();
+  _pendingEspnEv=ev._raw; _pendingLeague=league; _pendingMeta=meta;
+}
+
+/* ── BOOT ── */
+render();
+// Auto-load events on landing page
+loadOvrEvents();
+</script>
+</body>
+</html>
