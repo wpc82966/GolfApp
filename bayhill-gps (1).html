@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bay Hill GPS</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--gd:#0d1f15;--gm:#152b1e;--gold:#c9a84c;--gol:#e8c97a;--cr:#f4f0e6;--mu:#7a9080;--red:#c0392b;--bl:#2980b9}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--gd);color:var(--cr);font-family:'IBM Plex Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+.header{background:linear-gradient(180deg,#0a1510,var(--gd));border-bottom:1px solid rgba(201,168,76,.3);padding:12px 16px 8px;position:sticky;top:0;z-index:200}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.cn{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:var(--gold)}
+.cs{font-size:10px;color:var(--mu);letter-spacing:2px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
+.gps-badge{display:flex;align-items:center;gap:5px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--mu);background:rgba(255,255,255,.04);padding:4px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.08)}
+.gps-dot{width:7px;height:7px;border-radius:50%;background:#888;transition:background .3s}
+.gps-dot.active{background:#2ecc71;box-shadow:0 0 6px #2ecc71;animation:pulse 2s infinite}
+.gps-dot.searching{background:var(--gold);animation:pulse 1s infinite}
+.gps-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.acc-bar{height:2px;background:rgba(255,255,255,.05);border-radius:1px;overflow:hidden}
+.acc-fill{height:100%;background:linear-gradient(90deg,#2ecc71,var(--gold));transition:width 1s;border-radius:1px}
+.cbar{display:flex;gap:8px;padding:7px 16px;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04);font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--mu);overflow-x:auto}
+.ci{display:flex;align-items:center;gap:4px;white-space:nowrap}.ci span{color:var(--cr)}
+.hs{padding:10px 16px;background:var(--gm);border-bottom:1px solid rgba(201,168,76,.15);display:flex;align-items:center;gap:10px}
+.hnb{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold);width:36px;height:36px;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-appearance:none;transition:all .15s}
+.hnb:active{background:rgba(201,168,76,.25);transform:scale(.95)}
+.hd{flex:1;text-align:center}
+.hn{font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:var(--cr);line-height:1}
+.hl{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:2px;font-family:'IBM Plex Mono',monospace}
+.hm{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:4px}
+.mc{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--mu)}.mc span{color:var(--gol);font-weight:500}
+.hg{display:grid;grid-template-columns:repeat(9,1fr);gap:2px;padding:8px 16px;background:rgba(0,0,0,.2);border-bottom:1px solid rgba(201,168,76,.1)}
+.hc{aspect-ratio:1;border-radius:4px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--mu);cursor:pointer;transition:all .15s;position:relative}
+.hc.active{background:var(--gold);border-color:var(--gold);color:var(--gd);font-weight:700}
+.hc.scored::after{content:'';position:absolute;bottom:2px;right:2px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+.hc.active.scored::after{background:var(--gd)}
+.bnav{position:fixed;bottom:0;left:0;right:0;background:rgba(13,31,21,.97);border-top:1px solid rgba(201,168,76,.2);display:grid;grid-template-columns:repeat(5,1fr);padding:0 0 env(safe-area-inset-bottom);backdrop-filter:blur(10px);z-index:200}
+.nb{padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;border:none;background:transparent;color:var(--mu);font-size:10px;font-family:'IBM Plex Sans',sans-serif;letter-spacing:.5px;transition:color .15s;-webkit-appearance:none}
+.nb.active{color:var(--gold)}.nb svg{width:20px;height:20px}
+.ca{padding-bottom:80px}
+.view{display:none}.view.active{display:block}
+.sl{font-size:10px;text-transform:uppercase;letter-spacing:2.5px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sl::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+/* PLAY */
+.main{padding:16px}
+.dc{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px}
+.dcard{background:var(--gm);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px 10px;text-align:center}
+.dcard.ctr{background:linear-gradient(135deg,#1a3d2a,#0f2a1a);border-color:rgba(201,168,76,.25);transform:scale(1.04)}
+.dcl{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
+.dv{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:500;color:var(--cr);line-height:1}
+.dcard.ctr .dv{font-size:36px;color:var(--gold)}
+.du{font-size:11px;color:var(--mu);margin-top:2px;font-family:'IBM Plex Mono',monospace}
+.hzg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.hzc{background:var(--gm);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px}
+.hzi{font-size:20px;flex-shrink:0}
+.hzn{font-size:11px;color:var(--mu);font-family:'IBM Plex Mono',monospace}
+.hzd{font-size:20px;font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--cr)}
+.scs{background:var(--gm);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:16px;margin-bottom:20px}
+.sch{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sct{font-family:'Playfair Display',serif;font-size:16px}
+.sctot{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--mu)}
+.sctot span{color:var(--gol);font-size:16px;font-weight:500}
+.sir{display:flex;align-items:center;justify-content:center;gap:20px}
+.sbtn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--cr);width:44px;height:44px;border-radius:10px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-appearance:none;transition:all .15s}
+.sbtn:active{transform:scale(.93);background:rgba(255,255,255,.12)}
+.sdisp{text-align:center;min-width:60px}
+.snum{font-family:'Playfair Display',serif;font-size:48px;font-weight:900;line-height:1}
+.snum.bir{color:#2ecc71}.snum.eag{color:var(--gold)}.snum.bog{color:#e67e22}.snum.dbl{color:var(--red)}
+.srel{font-size:11px;font-family:'IBM Plex Mono',monospace;margin-top:2px;height:16px}
+.srel.und{color:#2ecc71}.srel.ov{color:#e67e22}.srel.ev{color:var(--mu)}
+.hdesc{background:rgba(0,0,0,.2);border-left:3px solid rgba(201,168,76,.4);border-radius:0 8px 8px 0;padding:12px 14px;font-size:13px;line-height:1.6;color:rgba(244,240,230,.7);font-style:italic}
+/* MAP */
+#viewMap{padding:0;position:relative}
+#leafletMap{width:100%;height:calc(100vh - 240px)}
+.map-ov{position:absolute;bottom:16px;left:16px;right:16px;background:rgba(13,31,21,.92);border:1px solid rgba(201,168,76,.2);border-radius:12px;padding:12px;z-index:400;backdrop-filter:blur(10px)}
+.map-leg{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.ml-item{display:flex;align-items:center;gap:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--cr)}
+.ml-dot{width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,.3)}
+.map-drow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.mdc{text-align:center}
+.mdl{font-size:9px;color:var(--mu);font-family:'IBM Plex Mono',monospace;letter-spacing:1px}
+.mdv{font-size:16px;font-family:'IBM Plex Mono',monospace;color:var(--cr);font-weight:500}
+.map-loc{position:absolute;top:16px;right:16px;z-index:400;background:rgba(13,31,21,.9);border:1px solid rgba(201,168,76,.3);color:var(--gold);width:40px;height:40px;border-radius:10px;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(10px)}
+/* TOUR */
+.thc{background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05));border:1px solid rgba(201,168,76,.3);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.ten{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);font-weight:900}
+.tes{font-size:11px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.trb{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:var(--gold);padding:8px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;-webkit-appearance:none;transition:all .2s}
+.trb:active{transform:scale(.96)}.trb.loading{opacity:.6;pointer-events:none}
+.lb-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.lb-table th{background:rgba(0,0,0,.3);color:var(--mu);padding:8px 6px;text-align:center;font-size:10px;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.06)}
+.lb-table th:nth-child(2),.lb-table td:nth-child(2){text-align:left;padding-left:8px}
+.lb-table td{padding:8px 6px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);color:var(--cr)}
+.lb-table tr:hover td{background:rgba(255,255,255,.03)}
+.su{color:#2ecc71}.so{color:#e67e22}.se{color:var(--mu)}
+.sb{font-weight:700;font-size:14px}
+.rb-live{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;letter-spacing:1px;background:rgba(192,57,43,.2);border:1px solid rgba(192,57,43,.4);color:#e74c3c}
+.rb-fin{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;letter-spacing:1px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3);color:#2ecc71}
+.ttr{background:var(--gm);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:12px}
+.ttm{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gold);min-width:70px;font-weight:500}
+.ttp{font-size:13px;color:var(--cr)}
+.tload{text-align:center;padding:40px 16px}
+.tspin{font-size:36px;animation:spin 1s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.terr{text-align:center;padding:32px 16px;color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:13px}
+.lpill{background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.3);color:var(--gold);font-size:9px;padding:1px 5px;border-radius:8px;margin-left:4px;letter-spacing:.5px}
+/* CARD */
+.sctable{width:100%;border-collapse:collapse;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.sctable th{background:rgba(0,0,0,.2);color:var(--mu);padding:6px 4px;text-align:center;font-size:10px;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.05)}
+.sctable td{padding:7px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);color:var(--cr)}
+.sctable tr.ch td{background:rgba(201,168,76,.1);color:var(--gol)}
+.sctable tr.sub td{background:rgba(0,0,0,.3);font-weight:700;border-top:1px solid rgba(201,168,76,.2);color:var(--gol)}
+.bir{color:#2ecc71}.eag{color:var(--gold)}.bog{color:#e67e22}.dbl{color:var(--red)}
+/* CLUBS */
+.csugg{background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05));border:1px solid rgba(201,168,76,.3);border-radius:12px;padding:16px;margin-bottom:20px;text-align:center}
+.csl{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-bottom:4px}
+.csn{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:var(--gold)}
+.csnote{font-size:11px;color:var(--mu);margin-top:2px;font-family:'IBM Plex Mono',monospace}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.ci2{background:var(--gm);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:13px;cursor:pointer}
+.ci2:active{background:rgba(255,255,255,.06)}
+.cn2{color:var(--mu)}.cy{color:var(--cr);font-weight:500}
+/* OVERLAY */
+.gpsov{position:fixed;inset:0;background:rgba(13,31,21,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:500;padding:32px;text-align:center}
+.gpsov.hidden{display:none}
+.gpsi{font-size:48px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.gpsov h2{font-family:'Playfair Display',serif;font-size:22px;color:var(--gold)}
+.gpsov p{font-size:14px;line-height:1.7;color:rgba(244,240,230,.7);max-width:280px}
+.gstbtn{background:var(--gold);color:var(--gd);border:none;padding:14px 32px;border-radius:12px;font-family:'Playfair Display',serif;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px;transition:all .2s;-webkit-appearance:none}
+.gstbtn:active{transform:scale(.97)}
+.skp{color:var(--mu);font-size:12px;cursor:pointer;text-decoration:underline;margin-top:-8px}
+.gpserr{color:#e74c3c;font-size:13px;max-width:280px;line-height:1.5}
+/* Leaflet */
+.leaflet-control-zoom{border:1px solid rgba(201,168,76,.3)!important;border-radius:8px!important;overflow:hidden}
+.leaflet-control-zoom a{background:rgba(13,31,21,.9)!important;color:var(--gold)!important;border-bottom-color:rgba(201,168,76,.2)!important}
+.leaflet-control-attribution{font-size:9px!important;background:rgba(0,0,0,.5)!important;color:rgba(255,255,255,.4)!important}
+.leaflet-control-attribution a{color:rgba(255,255,255,.5)!important}
+</style>
+</head>
+<body>
+
+<div class="gpsov" id="gpsov">
+  <div class="gpsi">⛳</div>
+  <h2>Bay Hill GPS</h2>
+  <p>Arnold Palmer's legendary course in Dr. Phillips, Florida. Enable GPS for real-time distances to all four tees, greens, and hazards.</p>
+  <button class="gstbtn" onclick="startGPS()">Enable GPS</button>
+  <span class="skp" onclick="skipGPS()">Continue without GPS</span>
+</div>
+
+<div class="header">
+  <div class="header-top">
+    <div><div class="cn">Bay Hill Club</div><div class="cs">Dr. Phillips, Florida · Par 72</div></div>
+    <div class="gps-badge"><div class="gps-dot" id="gpsDot"></div><span id="gpsStatus">GPS OFF</span></div>
+  </div>
+  <div class="acc-bar"><div class="acc-fill" id="accFill" style="width:0%"></div></div>
+</div>
+
+<div class="cbar">
+  <div class="ci">📍 <span id="coordDisp">--°N, --°W</span></div>
+  <div class="ci">🎯 ±<span id="accDisp">--</span></div>
+  <div class="ci">⛳ <span id="elevDisp">--</span></div>
+</div>
+
+<div class="hs">
+  <button class="hnb" onclick="changeHole(-1)">‹</button>
+  <div class="hd">
+    <div class="hl">Hole</div>
+    <div class="hn" id="holeNum">1</div>
+    <div class="hm">
+      <div class="mc">Par <span id="holePar">4</span></div>
+      <div class="mc"><span id="holeYards">441</span> yds</div>
+      <div class="mc">HCP <span id="holeHcp">7</span></div>
+    </div>
+  </div>
+  <button class="hnb" onclick="changeHole(1)">›</button>
+</div>
+
+<div class="hg" id="holesGrid"></div>
+
+<div class="ca">
+
+<!-- PLAY -->
+<div class="view active main" id="viewPlay">
+  <div class="sl">Distance to Green</div>
+  <div class="dc">
+    <div class="dcard"><div class="dcl">Front</div><div class="dv" id="dF">---</div><div class="du">yards</div></div>
+    <div class="dcard ctr"><div class="dcl">Center</div><div class="dv" id="dC">---</div><div class="du">yards</div></div>
+    <div class="dcard"><div class="dcl">Back</div><div class="dv" id="dB">---</div><div class="du">yards</div></div>
+  </div>
+  <div class="sl">Tee Distances (from your position)</div>
+  <div class="dc" style="margin-bottom:20px">
+    <div class="dcard" style="border-top:3px solid #555">
+      <div class="dcl" style="color:#aaa">⬛ Black</div>
+      <div class="dv" id="dBlack" style="font-size:22px">---</div>
+      <div class="du" id="yBlack">441 yds</div>
+    </div>
+    <div class="dcard" style="border-top:3px solid #2980b9">
+      <div class="dcl" style="color:#5dade2">🔵 Blue</div>
+      <div class="dv" id="dBlue" style="font-size:22px">---</div>
+      <div class="du" id="yBlue">407 yds</div>
+    </div>
+    <div class="dcard" style="border-top:3px solid #ccc">
+      <div class="dcl" style="color:#ddd">⬜ White</div>
+      <div class="dv" id="dWhite" style="font-size:22px">---</div>
+      <div class="du" id="yWhite">381 yds</div>
+    </div>
+  </div>
+  <div class="sl">Hazards &amp; Landmarks</div>
+  <div class="hzg" id="hazGrid"></div>
+  <div class="sl">Score This Hole</div>
+  <div class="scs">
+    <div class="sch"><div class="sct">Hole <span id="scHole">1</span></div><div class="sctot">Total: <span id="scTotal">E</span></div></div>
+    <div class="sir">
+      <button class="sbtn" onclick="adjScore(-1)">−</button>
+      <div class="sdisp"><div class="snum" id="scNum">-</div><div class="srel" id="scRel"></div></div>
+      <button class="sbtn" onclick="adjScore(1)">+</button>
+    </div>
+  </div>
+  <div class="hdesc" id="hDesc"></div>
+</div>
+
+<!-- MAP -->
+<div class="view" id="viewMap" style="padding:0;position:relative">
+  <div id="leafletMap" style="width:100%;height:calc(100vh - 240px)"></div>
+  <div class="map-loc" onclick="locateMe()" title="Find me">📍</div>
+  <div class="map-ov">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-family:'Playfair Display',serif;font-size:14px;color:var(--gold)" id="mapHoleName">Hole 1 · Par 4</div>
+      <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--mu)" id="mapGpsNote">GPS off</div>
+    </div>
+    <div class="map-leg">
+      <div class="ml-item"><div class="ml-dot" style="background:#333;border-color:#888"></div>Black <span id="legB" style="color:var(--mu);margin-left:2px"></span></div>
+      <div class="ml-item"><div class="ml-dot" style="background:#2980b9;border-color:#5dade2"></div>Blue <span id="legBl" style="color:var(--mu);margin-left:2px"></span></div>
+      <div class="ml-item"><div class="ml-dot" style="background:#f0f0f0;border-color:#999"></div>White <span id="legW" style="color:var(--mu);margin-left:2px"></span></div>
+      <div class="ml-item"><div class="ml-dot" style="background:#c0392b;border-color:#e74c3c"></div>Red <span id="legR" style="color:var(--mu);margin-left:2px"></span></div>
+    </div>
+    <div class="map-drow" id="mapDrow" style="display:none">
+      <div class="mdc"><div class="mdl">BLACK</div><div class="mdv" id="mdB">---</div></div>
+      <div class="mdc"><div class="mdl">BLUE</div><div class="mdv" id="mdBl">---</div></div>
+      <div class="mdc"><div class="mdl">WHITE</div><div class="mdv" id="mdW">---</div></div>
+      <div class="mdc"><div class="mdl">RED</div><div class="mdv" id="mdR">---</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOUR -->
+<div class="view main" id="viewTour">
+  <div class="thc">
+    <div>
+      <div class="ten">Arnold Palmer Invitational</div>
+      <div class="tes">Bay Hill · Mar 5–8, 2026 · $20M Purse</div>
+    </div>
+    <button class="trb" id="tRefBtn" onclick="loadTour()">↻ Refresh</button>
+  </div>
+  <div id="tourContent">
+    <div class="tload">
+      <div style="color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:16px">Live leaderboard + Sunday tee times</div>
+      <button class="gstbtn" style="font-size:14px;padding:12px 28px" onclick="loadTour()">Load Leaderboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- CARD -->
+<div class="view main" id="viewCard">
+  <div style="background:var(--gm);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden;margin-bottom:20px">
+    <div style="background:rgba(0,0,0,.3);padding:10px 16px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-family:'Playfair Display',serif;font-size:14px;color:var(--gold)">Scorecard</div>
+      <button onclick="resetScores()" style="background:rgba(192,57,43,.2);border:1px solid rgba(192,57,43,.3);color:#e74c3c;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'IBM Plex Mono',monospace;-webkit-appearance:none">RESET</button>
+    </div>
+    <table class="sctable" id="scTable"></table>
+  </div>
+</div>
+
+<!-- CLUBS -->
+<div class="view main" id="viewClubs">
+  <div class="sl">Suggested Club</div>
+  <div class="csugg">
+    <div class="csl">To Center Green</div>
+    <div class="csn" id="scName">—</div>
+    <div class="csnote" id="scNote">Enable GPS for suggestion</div>
+  </div>
+  <div class="sl">Your Bag · Tap to Edit</div>
+  <div class="cgrid" id="clubGrid"></div>
+</div>
+
+</div>
+
+<div class="bnav">
+  <button class="nb active" onclick="sw('Play')" id="navPlay">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>Play
+  </button>
+  <button class="nb" onclick="sw('Map')" id="navMap">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Map
+  </button>
+  <button class="nb" onclick="sw('Tour')" id="navTour">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>Tour
+  </button>
+  <button class="nb" onclick="sw('Card')" id="navCard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="3"/></svg>Card
+  </button>
+  <button class="nb" onclick="sw('Clubs')" id="navClubs">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M4 20l6-6"/><path d="M15 4l5 5-5 5"/></svg>Clubs
+  </button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ============================================================
+// COURSE DATA — Bay Hill Club & Lodge
+// ============================================================
+const C = [
+  {h:1,p:4,hcp:7,ty:{bk:441,bl:407,wh:381,rd:334},tee:[28.44820,-81.50250],
+   g:{f:[28.44650,-81.50410],c:[28.44620,-81.50440],b:[28.44590,-81.50470]},
+   hz:[{n:"Right Bunker",i:"🏖",c:[28.44640,-81.50380]},{n:"Left Rough",i:"🌿",c:[28.44660,-81.50480]}],
+   d:"Strong opening par-4. Tee shot down the left side opens the best angle into the elevated green."},
+  {h:2,p:5,hcp:15,ty:{bk:218,bl:195,wh:170,rd:120},tee:[28.44590,-81.50490],
+   g:{f:[28.44470,-81.50620],c:[28.44440,-81.50650],b:[28.44410,-81.50680]},
+   hz:[{n:"Front Bunker",i:"🏖",c:[28.44490,-81.50590]},{n:"Right Water",i:"💧",c:[28.44480,-81.50520]}],
+   d:"Reachable par-5. Water protects the right side — lay up left for a better approach angle."},
+  {h:3,p:4,hcp:11,ty:{bk:393,bl:355,wh:316,rd:273},tee:[28.44410,-81.50680],
+   g:{f:[28.44280,-81.50820],c:[28.44250,-81.50850],b:[28.44220,-81.50880]},
+   hz:[{n:"Fairway Bunker",i:"🏖",c:[28.44350,-81.50750]},{n:"Deep Rough",i:"🌿",c:[28.44290,-81.50790]}],
+   d:"Dogleg right par-4. Lay up short of the bunkers for a clean iron into the undulating green."},
+  {h:4,p:3,hcp:17,ty:{bk:222,bl:204,wh:183,rd:138},tee:[28.44220,-81.50880],
+   g:{f:[28.44100,-81.50980],c:[28.44080,-81.51000],b:[28.44060,-81.51020]},
+   hz:[{n:"Left Bunker",i:"🏖",c:[28.44110,-81.51020]},{n:"Right Bunker",i:"🏖",c:[28.44110,-81.50960]}],
+   d:"Long par-3 bunkered on both sides. Center green is always the right play — pin-hunting costs."},
+  {h:5,p:4,hcp:9,ty:{bk:394,bl:361,wh:321,rd:268},tee:[28.44060,-81.51020],
+   g:{f:[28.43920,-81.51180],c:[28.43890,-81.51210],b:[28.43860,-81.51240]},
+   hz:[{n:"Left Water",i:"💧",c:[28.43980,-81.51090]},{n:"Greenside Bunker",i:"🏖",c:[28.43900,-81.51240]}],
+   d:"Water lines the full left side. Stay right off the tee. The green slopes front-to-back."},
+  {h:6,p:5,hcp:1,ty:{bk:543,bl:513,wh:467,rd:410},tee:[28.43860,-81.51240],
+   g:{f:[28.43640,-81.51450],c:[28.43610,-81.51480],b:[28.43580,-81.51510]},
+   hz:[{n:"Fairway Bunkers",i:"🏖",c:[28.43760,-81.51340]},{n:"Green Left Trap",i:"🏖",c:[28.43620,-81.51520]},{n:"Lateral Rough",i:"🌿",c:[28.43680,-81.51400]}],
+   d:"#1 handicap. Long par-5 requiring three solid shots. The green is well-defended on both sides."},
+  {h:7,p:5,hcp:5,ty:{bk:549,bl:520,wh:471,rd:420},tee:[28.43580,-81.51510],
+   g:{f:[28.43350,-81.51730],c:[28.43320,-81.51760],b:[28.43290,-81.51790]},
+   hz:[{n:"Pond Left",i:"💧",c:[28.43470,-81.51610]},{n:"Fairway Bunker",i:"🏖",c:[28.43430,-81.51690]}],
+   d:"Slight dogleg right par-5. Pond on the left demands respect off the tee. Smart layup is the play."},
+  {h:8,p:4,hcp:3,ty:{bk:420,bl:391,wh:351,rd:298},tee:[28.43290,-81.51790],
+   g:{f:[28.43130,-81.51960],c:[28.43100,-81.51990],b:[28.43070,-81.52020]},
+   hz:[{n:"Right Bunker",i:"🏖",c:[28.43150,-81.51940]},{n:"Left Water",i:"💧",c:[28.43200,-81.51860]}],
+   d:"Tough par-4. Water left, bunker right. The elevated green demands a precise approach."},
+  {h:9,p:4,hcp:13,ty:{bk:460,bl:421,wh:381,rd:325},tee:[28.43070,-81.52020],
+   g:{f:[28.44800,-81.50200],c:[28.44780,-81.50230],b:[28.44760,-81.50260]},
+   hz:[{n:"Front Bunker",i:"🏖",c:[28.44810,-81.50160]},{n:"Right Rough",i:"🌿",c:[28.44770,-81.50100]}],
+   d:"Long closing par-4 of the front nine. A solid tee shot and crisp approach to make the turn in shape."},
+  {h:10,p:4,hcp:10,ty:{bk:418,bl:388,wh:352,rd:302},tee:[28.44760,-81.50260],
+   g:{f:[28.44920,-81.50450],c:[28.44950,-81.50480],b:[28.44980,-81.50510]},
+   hz:[{n:"Left Bunker",i:"🏖",c:[28.44900,-81.50420]},{n:"Right Rough",i:"🌿",c:[28.44940,-81.50510]}],
+   d:"Back nine opens with a mid-length par-4. Hit the fairway and the green is very approachable."},
+  {h:11,p:4,hcp:4,ty:{bk:420,bl:390,wh:363,rd:302},tee:[28.44980,-81.50510],
+   g:{f:[28.45140,-81.50700],c:[28.45170,-81.50730],b:[28.45200,-81.50760]},
+   hz:[{n:"Left Water",i:"💧",c:[28.45050,-81.50620]},{n:"Greenside Bunker",i:"🏖",c:[28.45160,-81.50760]}],
+   d:"Water the full left side. Stay right off the tee. Short-siding yourself left is a costly mistake."},
+  {h:12,p:5,hcp:2,ty:{bk:558,bl:527,wh:478,rd:430},tee:[28.45200,-81.50760],
+   g:{f:[28.45430,-81.50990],c:[28.45460,-81.51020],b:[28.45490,-81.51050]},
+   hz:[{n:"Fairway Bunker R",i:"🏖",c:[28.45310,-81.50870]},{n:"Fairway Bunker L",i:"🏖",c:[28.45330,-81.50920]},{n:"Pond Short",i:"💧",c:[28.45410,-81.50950]}],
+   d:"Long par-5. Pond guards the green for two-ball attempts. Lay up and pitch on for a birdie look."},
+  {h:13,p:3,hcp:16,ty:{bk:181,bl:160,wh:133,rd:98},tee:[28.45490,-81.51050],
+   g:{f:[28.45600,-81.51200],c:[28.45620,-81.51230],b:[28.45640,-81.51260]},
+   hz:[{n:"Left Bunker",i:"🏖",c:[28.45610,-81.51270]},{n:"Right Bunker",i:"🏖",c:[28.45610,-81.51190]}],
+   d:"Straightforward par-3. Two bunkers frame the green. Club selection is the key — aim center."},
+  {h:14,p:4,hcp:12,ty:{bk:380,bl:351,wh:312,rd:267},tee:[28.45640,-81.51260],
+   g:{f:[28.45810,-81.51440],c:[28.45840,-81.51470],b:[28.45870,-81.51500]},
+   hz:[{n:"Bunker Right",i:"🏖",c:[28.45760,-81.51380]},{n:"Left Rough",i:"🌿",c:[28.45720,-81.51430]}],
+   d:"Shorter par-4 offering a birdie opportunity. Lay back off the tee and leave a short approach."},
+  {h:15,p:4,hcp:6,ty:{bk:408,bl:378,wh:342,rd:288},tee:[28.45870,-81.51500],
+   g:{f:[28.46060,-81.51700],c:[28.46090,-81.51730],b:[28.46120,-81.51760]},
+   hz:[{n:"Fairway Water",i:"💧",c:[28.45960,-81.51590]},{n:"Greenside Trap",i:"🏖",c:[28.46080,-81.51770]}],
+   d:"Water left demands a well-placed tee shot. Par here is a solid result on this demanding hole."},
+  {h:16,p:3,hcp:14,ty:{bk:203,bl:185,wh:157,rd:117},tee:[28.46120,-81.51760],
+   g:{f:[28.46260,-81.51940],c:[28.46290,-81.51970],b:[28.46320,-81.52000]},
+   hz:[{n:"Left Bunker",i:"🏖",c:[28.46270,-81.52010]},{n:"Right Bunker",i:"🏖",c:[28.46270,-81.51930]}],
+   d:"Mid-length par-3. Two bunkers frame the green. Take dead aim at center — the tough finish awaits."},
+  {h:17,p:4,hcp:8,ty:{bk:438,bl:408,wh:370,rd:308},tee:[28.46320,-81.52000],
+   g:{f:[28.46500,-81.52210],c:[28.46530,-81.52240],b:[28.46560,-81.52270]},
+   hz:[{n:"Pond Right",i:"💧",c:[28.46420,-81.52100]},{n:"Bunker Front-L",i:"🏖",c:[28.46510,-81.52270]}],
+   d:"Water right builds pressure heading to 18. Stay left off the tee and attack the green with confidence."},
+  {h:18,p:4,hcp:18,ty:{bk:441,bl:410,wh:381,rd:332},tee:[28.46560,-81.52270],
+   g:{f:[28.44540,-81.50180],c:[28.44510,-81.50150],b:[28.44480,-81.50120]},
+   hz:[{n:"Lake Bessie",i:"💧",c:[28.45500,-81.51200]},{n:"Left Water OB",i:"💧",c:[28.44700,-81.50300]},{n:"Front Bunker",i:"🏖",c:[28.44550,-81.50120]}],
+   d:"🏆 Most famous closing hole in Florida golf. Water the full left side — second shot carries over water. Par is a victory. Birdie is glory."}
+];
+
+const DEF_CLUBS=[
+  {n:"Driver",y:250},{n:"3W",y:225},{n:"5W",y:210},{n:"4i",y:195},{n:"5i",y:185},
+  {n:"6i",y:172},{n:"7i",y:160},{n:"8i",y:148},{n:"9i",y:135},
+  {n:"PW",y:120},{n:"GW",y:105},{n:"SW",y:90},{n:"LW",y:70}
+];
+
+// STATE
+let cur=0, scores=new Array(18).fill(null);
+let uLat=null,uLng=null,gpsW=null;
+let clubs=JSON.parse(localStorage.getItem('bhc3')||'null')||DEF_CLUBS;
+let curView='Play',mapInit=false,lmap=null;
+let mM={tees:{},green:null,gps:null,line:null};
+
+// MATH
+function hav(a1,o1,a2,o2){
+  const R=6371000,da=(a2-a1)*Math.PI/180,do2=(o2-o1)*Math.PI/180;
+  const a=Math.sin(da/2)**2+Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(do2/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function m2y(m){return Math.round(m*1.09361)}
+
+function teePt(bkTee,gc,bkY,tgtY){
+  if(tgtY===bkY)return [...bkTee];
+  const cl=Math.cos(bkTee[0]*Math.PI/180);
+  const dlm=(gc[0]-bkTee[0])*111000,dlgm=(gc[1]-bkTee[1])*111000*cl;
+  const d=Math.sqrt(dlm*dlm+dlgm*dlgm);
+  if(d<1)return [...bkTee];
+  const mv=(bkY-tgtY)*0.9144;
+  return [bkTee[0]+(dlm/d*mv)/111000, bkTee[1]+(dlgm/d*mv)/(111000*cl)];
+}
+
+function getTees(i){
+  const h=C[i];
+  return {
+    bk:[...h.tee],
+    bl:teePt(h.tee,h.g.c,h.ty.bk,h.ty.bl),
+    wh:teePt(h.tee,h.g.c,h.ty.bk,h.ty.wh),
+    rd:teePt(h.tee,h.g.c,h.ty.bk,h.ty.rd)
+  };
+}
+
+// GPS
+function startGPS(){
+  document.getElementById('gpsov').classList.add('hidden');
+  document.getElementById('gpsDot').className='gps-dot searching';
+  document.getElementById('gpsStatus').textContent='SEARCHING';
+  if(!navigator.geolocation){document.getElementById('gpsStatus').textContent='NO GPS';document.getElementById('gpsDot').className='gps-dot error';return;}
+  gpsW=navigator.geolocation.watchPosition(onGPSOK,onGPSErr,{enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+}
+function skipGPS(){document.getElementById('gpsov').classList.add('hidden');refresh();}
+
+function onGPSOK(pos){
+  uLat=pos.coords.latitude;uLng=pos.coords.longitude;
+  const acc=Math.round(pos.coords.accuracy);
+  const alt=pos.coords.altitude?Math.round(pos.coords.altitude*3.281)+' ft':'--';
+  document.getElementById('gpsDot').className='gps-dot active';
+  document.getElementById('gpsStatus').textContent='LIVE';
+  document.getElementById('coordDisp').textContent=uLat.toFixed(4)+'°N, '+Math.abs(uLng).toFixed(4)+'°W';
+  document.getElementById('accDisp').textContent=acc+'m';
+  document.getElementById('elevDisp').textContent=alt;
+  document.getElementById('accFill').style.width=Math.max(0,Math.min(100,(1-(acc-5)/45)*100))+'%';
+  updateDist();
+  mapGPS();
+}
+
+function onGPSErr(err){
+  document.getElementById('gpsDot').className='gps-dot error';
+  const lbl={1:'DENIED',2:'UNAVAILABLE',3:'TIMEOUT'};
+  document.getElementById('gpsStatus').textContent=lbl[err.code]||'ERROR';
+  const pol=err.code===1&&err.message&&err.message.toLowerCase().includes('permissions policy');
+  const hints={
+    1:pol?'📲 GPS blocked in preview. Download & open the HTML file directly in Chrome on your phone.':'Location denied. Allow location in browser settings and reload.',
+    2:'Position unavailable. Step outside with a clear view of the sky.',
+    3:'GPS timed out. Move to an open area and try again.'
+  };
+  const hint=hints[err.code]||'Unknown GPS error.';
+  const ov=document.getElementById('gpsov');
+  if(!ov.classList.contains('hidden')){
+    const e=document.createElement('p');e.className='gpserr';e.textContent='⚠️ '+hint;
+    ov.querySelector('.gstbtn').insertAdjacentElement('beforebegin',e);
+  }
+}
+
+// DISPLAY
+function refresh(){
+  const h=C[cur];
+  document.getElementById('holeNum').textContent=h.h;
+  document.getElementById('holePar').textContent=h.p;
+  document.getElementById('holeYards').textContent=h.ty.bk;
+  document.getElementById('holeHcp').textContent=h.hcp;
+  document.getElementById('hDesc').textContent=h.d;
+  document.getElementById('scHole').textContent=h.h;
+  document.getElementById('yBlack').textContent=h.ty.bk+' yds (Black)';
+  document.getElementById('yBlue').textContent=h.ty.bl+' yds (Blue)';
+  document.getElementById('yWhite').textContent=h.ty.wh+' yds (White)';
+  // legend
+  document.getElementById('legB').textContent=h.ty.bk+'y';
+  document.getElementById('legBl').textContent=h.ty.bl+'y';
+  document.getElementById('legW').textContent=h.ty.wh+'y';
+  document.getElementById('legR').textContent=h.ty.rd+'y';
+  document.getElementById('mapHoleName').textContent='Hole '+h.h+' · Par '+h.p+' · '+h.ty.bk+' yds';
+  // holes grid
+  const g=document.getElementById('holesGrid');
+  g.innerHTML=C.map((hh,i)=>{
+    let cls='hc';if(i===cur)cls+=' active';if(scores[i]!==null)cls+=' scored';
+    return `<div class="${cls}" onclick="goH(${i})">${hh.h}</div>`;
+  }).join('');
+  updateDist();renderScore();renderClubs();renderCard();
+  if(mapInit)renderMapHole();
+}
+
+function updateDist(){
+  const h=C[cur];
+  if(uLat!==null){
+    document.getElementById('dF').textContent=m2y(hav(uLat,uLng,h.g.f[0],h.g.f[1]));
+    document.getElementById('dC').textContent=m2y(hav(uLat,uLng,h.g.c[0],h.g.c[1]));
+    document.getElementById('dB').textContent=m2y(hav(uLat,uLng,h.g.b[0],h.g.b[1]));
+    const t=getTees(cur);
+    document.getElementById('dBlack').textContent=m2y(hav(uLat,uLng,t.bk[0],t.bk[1]));
+    document.getElementById('dBlue').textContent=m2y(hav(uLat,uLng,t.bl[0],t.bl[1]));
+    document.getElementById('dWhite').textContent=m2y(hav(uLat,uLng,t.wh[0],t.wh[1]));
+    // map distances
+    document.getElementById('mapDrow').style.display='grid';
+    document.getElementById('mdB').textContent=m2y(hav(uLat,uLng,t.bk[0],t.bk[1]));
+    document.getElementById('mdBl').textContent=m2y(hav(uLat,uLng,t.bl[0],t.bl[1]));
+    document.getElementById('mdW').textContent=m2y(hav(uLat,uLng,t.wh[0],t.wh[1]));
+    document.getElementById('mdR').textContent=m2y(hav(uLat,uLng,t.rd[0],t.rd[1]));
+    document.getElementById('mapGpsNote').textContent='GPS live';
+    const dc=m2y(hav(uLat,uLng,h.g.c[0],h.g.c[1]));
+    suggestClub(dc);
+  } else {
+    ['dF','dC','dB','dBlack','dBlue','dWhite'].forEach(id=>document.getElementById(id).textContent='---');
+  }
+  // hazards
+  document.getElementById('hazGrid').innerHTML=h.hz.map(z=>{
+    const d=uLat!==null?m2y(hav(uLat,uLng,z.c[0],z.c[1])):'---';
+    return `<div class="hzc"><div class="hzi">${z.i||'⚠️'}</div><div><div class="hzn">${z.n}</div><div class="hzd">${d}</div></div></div>`;
+  }).join('');
+}
+
+// MAP
+function initMap(){
+  if(mapInit)return;
+  const h=C[cur];
+  lmap=L.map('leafletMap',{zoomControl:true,attributionControl:true}).setView(h.g.c,17);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
+    attribution:'Imagery © Esri',maxZoom:20
+  }).addTo(lmap);
+  mapInit=true;
+  renderMapHole();
+  if(uLat!==null)mapGPS();
+}
+
+function renderMapHole(){
+  if(!mapInit)return;
+  const h=C[cur];const t=getTees(cur);
+  // Clear
+  Object.values(mM.tees).forEach(m=>m&&lmap.removeLayer(m));
+  if(mM.green)lmap.removeLayer(mM.green);
+  if(mM.fw)lmap.removeLayer(mM.fw);
+  mM.tees={};
+  // Tee markers
+  const tcfg=[
+    {k:'bk',bg:'#222',bd:'#888',lbl:'B',tc:'#fff',coords:t.bk,name:'Black',y:h.ty.bk},
+    {k:'bl',bg:'#2980b9',bd:'#5dade2',lbl:'b',tc:'#fff',coords:t.bl,name:'Blue',y:h.ty.bl},
+    {k:'wh',bg:'#f0f0f0',bd:'#aaa',lbl:'W',tc:'#333',coords:t.wh,name:'White',y:h.ty.wh},
+    {k:'rd',bg:'#c0392b',bd:'#e74c3c',lbl:'R',tc:'#fff',coords:t.rd,name:'Red',y:h.ty.rd}
+  ];
+  tcfg.forEach(tc=>{
+    const icon=L.divIcon({className:'',iconSize:[18,18],iconAnchor:[9,9],
+      html:`<div style="width:18px;height:18px;background:${tc.bg};border:2px solid ${tc.bd};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:bold;color:${tc.tc};font-family:monospace;box-shadow:0 1px 4px rgba(0,0,0,.7)">${tc.lbl}</div>`
+    });
+    const m=L.marker(tc.coords,{icon}).addTo(lmap);
+    m.bindPopup(`<b>${tc.name} Tees</b> — ${tc.y} yds`);
+    mM.tees[tc.k]=m;
+  });
+  // Green
+  const gi=L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],
+    html:`<div style="width:24px;height:24px;background:rgba(39,174,96,.9);border:3px solid #27ae60;border-radius:50%;box-shadow:0 0 10px rgba(39,174,96,.7);display:flex;align-items:center;justify-content:center;font-size:11px">⛳</div>`
+  });
+  mM.green=L.marker(h.g.c,{icon:gi}).addTo(lmap);
+  mM.green.bindPopup(`<b>Green – Hole ${h.h}</b><br>Par ${h.p}`);
+  // Fairway guide
+  mM.fw=L.polyline([t.bk,h.g.c],{color:'rgba(46,160,67,.45)',weight:3,dashArray:'8,6'}).addTo(lmap);
+  // Fit bounds
+  const bounds=L.latLngBounds([t.bk,t.rd,h.g.f,h.g.b]);
+  lmap.fitBounds(bounds,{padding:[50,50]});
+}
+
+function mapGPS(){
+  if(!mapInit||uLat===null)return;
+  if(mM.gps)lmap.removeLayer(mM.gps);
+  if(mM.line)lmap.removeLayer(mM.line);
+  const gi=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],
+    html:`<div style="width:16px;height:16px;background:#2ecc71;border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px rgba(46,204,113,.8),0 0 0 5px rgba(46,204,113,.2)"></div>`
+  });
+  mM.gps=L.marker([uLat,uLng],{icon:gi}).addTo(lmap).bindPopup('📍 Your Position');
+  const h=C[cur];
+  const dc=m2y(hav(uLat,uLng,h.g.c[0],h.g.c[1]));
+  mM.line=L.polyline([[uLat,uLng],h.g.c],{color:'#c9a84c',weight:2,dashArray:'5,5',opacity:.85}).addTo(lmap)
+    .bindTooltip(`${dc} yds`,{permanent:false});
+}
+
+function locateMe(){
+  if(uLat!==null&&mapInit){lmap.setView([uLat,uLng],18);}
+  else alert('Enable GPS first.');
+}
+
+// TOURNAMENT
+async function loadTour(){
+  const btn=document.getElementById('tRefBtn');
+  const content=document.getElementById('tourContent');
+  btn.classList.add('loading');btn.textContent='Loading…';
+  content.innerHTML=`<div class="tload"><div class="tspin">⛳</div><div style="color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:12px">Fetching live scores…</div></div>`;
+  try {
+    const sys=`You are a golf data assistant. Search the web for the current live 2026 Arnold Palmer Invitational leaderboard at Bay Hill Club in Orlando FL. Today is Saturday March 7 2026 and Round 3 is underway. Return ONLY raw JSON — no markdown, no backticks, no explanation. Use this exact structure:
+{"round":"3","status":"In Progress","lastUpdated":"March 7 2026","leaderboard":[{"pos":"1","name":"Daniel Berger","total":"-15","r1":"65","r2":"66","r3":"-4","thru":"14","teeTime":""}],"r4Times":[{"time":"9:00 AM","players":["Name1","Name2","Name3"]}]}
+Include all players who made the cut (up to 60). Put actual current scores from web search. For r4Times: include Sunday Round 4 tee times only if announced; otherwise empty array.`;
+    let msgs=[{role:'user',content:'Get the live 2026 Arnold Palmer Invitational leaderboard with all current scores and any available Round 4 Sunday tee times. Search the web for latest data.'}];
+    let resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],system:sys,messages:msgs})});
+    let data=await resp.json();
+    // Loop up to 3 turns for tool use
+    for(let t=0;t<3;t++){
+      const tb=data.content&&data.content.find(b=>b.type==='text');
+      if(tb)break;
+      const tu=data.content&&data.content.find(b=>b.type==='tool_use');
+      if(!tu)break;
+      msgs=[...msgs,{role:'assistant',content:data.content},{role:'user',content:[{type:'tool_result',tool_use_id:tu.id,content:'Search complete. Please now format all results as JSON.'}]}];
+      resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],system:sys,messages:msgs})});
+      data=await resp.json();
+    }
+    const tb=data.content&&data.content.find(b=>b.type==='text');
+    if(!tb)throw new Error('No response from API');
+    const clean=tb.text.replace(/```json|```/g,'').trim();
+    const json=JSON.parse(clean);
+    drawLeaderboard(json);
+  } catch(e){
+    content.innerHTML=`<div class="terr">⚠️ Could not load live data.<br><br>${e.message}<br><br><button onclick="loadTour()" style="background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:var(--gold);padding:8px 16px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;-webkit-appearance:none">Try Again</button></div>`;
+  }
+  btn.classList.remove('loading');btn.textContent='↻ Refresh';
+}
+
+function drawLeaderboard(data){
+  const c=document.getElementById('tourContent');
+  const badge=data.status&&data.status.toLowerCase().includes('progress')
+    ?`<span class="rb-live">● LIVE RD ${data.round||'3'}</span>`
+    :`<span class="rb-fin">✓ RD ${data.round||'4'} COMPLETE</span>`;
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">${badge}<span style="font-size:10px;color:var(--mu);font-family:'IBM Plex Mono',monospace">${data.lastUpdated||'Just now'}</span></div>`;
+  html+=`<div style="overflow-x:auto;margin-bottom:20px"><table class="lb-table"><thead><tr><th>POS</th><th>PLAYER</th><th>TOT</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>THRU</th></tr></thead><tbody>`;
+  if(data.leaderboard&&data.leaderboard.length){
+    data.leaderboard.forEach((p,i)=>{
+      const sc=parseFloat(p.total);
+      const cls=sc<0?'su':sc>0?'so':'se';
+      const lead=i===0?`<span class="lpill">LEAD</span>`:'';
+      html+=`<tr><td style="color:var(--mu)">${p.pos||i+1}</td><td style="text-align:left;padding-left:8px">${p.name||'—'}${lead}</td><td class="${cls} sb">${p.total||'—'}</td><td>${p.r1||'—'}</td><td>${p.r2||'—'}</td><td>${p.r3||'—'}</td><td>${p.r4||'—'}</td><td style="color:var(--mu)">${p.thru||'—'}</td></tr>`;
+    });
+  }
+  html+=`</tbody></table></div>`;
+  // Tee times section
+  html+=`<div class="sl">Sunday Tee Times · Round 4</div>`;
+  if(data.r4Times&&data.r4Times.length){
+    data.r4Times.forEach(tt=>{
+      const ps=Array.isArray(tt.players)?tt.players.join(' · '):'';
+      html+=`<div class="ttr"><div class="ttm">${tt.time||''}</div><div class="ttp">${ps}</div></div>`;
+    });
+  } else {
+    html+=`<div style="background:rgba(0,0,0,.2);border-radius:10px;padding:16px;text-align:center;color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.7">R4 tee times are set after Round 3 concludes tonight.<br>Tap <span style="color:var(--gold)">Refresh</span> Sunday morning for final pairings.</div>`;
+  }
+  c.innerHTML=html;
+}
+
+// SCORE
+function renderScore(){
+  const h=C[cur];const s=scores[cur];
+  const el=document.getElementById('scNum');const rl=document.getElementById('scRel');
+  if(s===null){el.textContent='-';el.className='snum';rl.textContent='';rl.className='srel';}
+  else{
+    el.textContent=s;const d=s-h.p;
+    if(d<=-2){el.className='snum eag';rl.textContent=d===-2?'EAGLE':'ALBATROSS';rl.className='srel und';}
+    else if(d===-1){el.className='snum bir';rl.textContent='BIRDIE';rl.className='srel und';}
+    else if(d===0){el.className='snum';rl.textContent='PAR';rl.className='srel ev';}
+    else if(d===1){el.className='snum bog';rl.textContent='BOGEY';rl.className='srel ov';}
+    else if(d===2){el.className='snum dbl';rl.textContent='DOUBLE';rl.className='srel ov';}
+    else{el.className='snum dbl';rl.textContent='+'+d;rl.className='srel ov';}
+  }
+  const played=scores.map((sv,i)=>sv!==null?sv-C[i].p:null).filter(v=>v!==null);
+  const t=played.reduce((a,b)=>a+b,0);
+  document.getElementById('scTotal').textContent=played.length===0?'E':t===0?'E':t>0?'+'+t:''+t;
+}
+
+function adjScore(d){
+  const h=C[cur];const s=scores[cur];
+  scores[cur]=s===null?(d>0?h.p:h.p-1):Math.max(1,s+d);
+  renderScore();renderCard();refresh();
+}
+function resetScores(){if(confirm('Reset all scores?')){scores=new Array(18).fill(null);refresh();}}
+
+// CLUBS
+function suggestClub(dc){
+  if(!dc){document.getElementById('scNote').textContent='Enable GPS for suggestion';return;}
+  const b=clubs.filter(c=>c.y>0).reduce((bst,c)=>Math.abs(c.y-dc)<Math.abs(bst.y-dc)?c:bst,clubs[0]);
+  document.getElementById('scName').textContent=b.n;
+  const diff=b.y-dc;
+  document.getElementById('scNote').textContent=diff===0?'Perfect distance':diff>0?`${diff} yds over — choke down`:`${Math.abs(diff)} yds short — swing through`;
+}
+function renderClubs(){
+  document.getElementById('clubGrid').innerHTML=clubs.map((c,i)=>
+    `<div class="ci2" onclick="editClub(${i})"><span class="cn2">${c.n}</span><span class="cy">${c.y} yds</span></div>`
+  ).join('');
+}
+function editClub(i){
+  const c=clubs[i];const v=prompt(`${c.n} — your average distance (yards):`,c.y);
+  if(v&&!isNaN(parseInt(v))){clubs[i].y=parseInt(v);localStorage.setItem('bhc3',JSON.stringify(clubs));renderClubs();}
+}
+
+// SCORECARD
+function renderCard(){
+  const t=document.getElementById('scTable');
+  let html=`<thead><tr><th>Hole</th><th>Par</th><th>Yds</th><th>HCP</th><th>Score</th><th>+/-</th></tr></thead><tbody>`;
+  let f9s=0,f9p=0,b9s=0,b9p=0,fn=0,bn=0;
+  C.forEach((h,i)=>{
+    const s=scores[i];const d=s!==null?s-h.p:null;
+    const ch=i===cur?'ch':'';
+    let sc='';if(d!==null){if(d<=-2)sc='eag';else if(d===-1)sc='bir';else if(d===1)sc='bog';else if(d>=2)sc='dbl';}
+    const ds=d===null?'':(d===0?'E':(d>0?'+'+d:''+d));
+    html+=`<tr class="${ch}"><td>${h.h}</td><td>${h.p}</td><td>${h.ty.bk}</td><td>${h.hcp}</td><td class="${sc}">${s!==null?s:'-'}</td><td class="${sc}">${ds}</td></tr>`;
+    if(i<9){f9p+=h.p;if(s!==null){f9s+=s;fn++;}}
+    else{b9p+=h.p;if(s!==null){b9s+=s;bn++;}}
+    if(i===8){const fd=fn>0?(f9s-f9p>0?'+':'')+(f9s-f9p):'-';html+=`<tr class="sub"><td colspan="2">OUT</td><td>${f9p}</td><td></td><td>${fn>0?f9s:'-'}</td><td>${fd}</td></tr>`;}
+  });
+  const ts=f9s+b9s,n=fn+bn,td=ts-72;
+  const bd=bn>0?(b9s-b9p>0?'+':'')+(b9s-b9p):'-';
+  html+=`<tr class="sub"><td colspan="2">IN</td><td>${b9p}</td><td></td><td>${bn>0?b9s:'-'}</td><td>${bd}</td></tr>`;
+  html+=`<tr class="sub"><td colspan="2">TOTAL</td><td>72</td><td></td><td>${n>0?ts:'-'}</td><td>${n>0?(td>0?'+':'')+td:'-'}</td></tr></tbody>`;
+  t.innerHTML=html;
+}
+
+// NAV
+function sw(view){
+  curView=view;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view'+view).classList.add('active');
+  document.getElementById('nav'+view).classList.add('active');
+  if(view==='Map'){
+    if(!mapInit)setTimeout(initMap,50);
+    else setTimeout(()=>lmap.invalidateSize(),100);
+  }
+}
+function changeHole(d){cur=(cur+d+18)%18;refresh();}
+function goH(i){cur=i;refresh();if(curView!=='Play')sw('Play');}
+
+// INIT
+refresh();
+</script>
+</body>
+</html>
